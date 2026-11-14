@@ -8,8 +8,9 @@ import { useAuth } from '../../context/AuthContext';
 import { format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import StaffDayView from '../staff/StaffDayView';
 
-const AppointmentsDayView = () => {
+const OwnerAppointmentsDayView = () => {
   const { date } = useParams<{ date: string }>();
   const navigate = useNavigate();
   const { appointments, updateStatus, deleteAppointment, loading } = useAdminAppointments();
@@ -47,24 +48,24 @@ const AppointmentsDayView = () => {
           <ChevronLeft className="w-5 h-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center">
-            <CalendarIcon className="w-6 h-6 mr-2 text-gold-500" />
+          <h1 className="flex items-center font-display text-2xl font-normal tracking-tight text-ink">
+            <CalendarIcon className="mr-2 h-6 w-6 text-brass-dark" />
             {format(selectedDate, 'd MMMM yyyy, EEEE', { locale: tr })}
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">Bu tarihe ait randevu detayları</p>
+          <p className="text-ink/45 mt-1 text-sm">Bu tarihe ait randevu detayları</p>
         </div>
       </div>
 
       {loading ? (
         <div className="flex justify-center p-12">
-          <Loader2 className="w-8 h-8 animate-spin text-gold-500" />
+          <Loader2 className="w-8 h-8 animate-spin text-brass-dark" />
         </div>
       ) : filteredAppointments.length === 0 ? (
         <Card className="bg-white border border-border/60 shadow-sm rounded-2xl overflow-hidden p-12 text-center mt-8">
-          <p className="text-muted-foreground font-medium text-lg">Bu tarihte hiç randevu bulunmuyor.</p>
+          <p className="text-ink/45 font-medium text-lg">Bu tarihte hiç randevu bulunmuyor.</p>
           <Button 
             onClick={() => navigate('/admin/appointments')}
-            className="mt-6 rounded-xl bg-gold-500 hover:bg-gold-600 text-white font-semibold"
+            className="mt-6 rounded-xl bg-ink hover:bg-ink-soft text-cream font-semibold"
           >
             Takvime Geri Dön
           </Button>
@@ -73,8 +74,8 @@ const AppointmentsDayView = () => {
         <div className="space-y-12 mt-8">
           {Object.entries(groupedAppointments).map(([barberName, apps]) => (
             <div key={barberName} className="space-y-6">
-              <h2 className="text-xl font-bold border-b border-border/50 pb-2 flex items-center text-foreground">
-                <span className="bg-gold-500/10 text-gold-600 px-3 py-1 rounded-lg mr-3 text-sm">{apps.length} Randevu</span>
+              <h2 className="text-xl font-bold border-b border-border/50 pb-2 flex items-center text-ink">
+                <span className="bg-brass/10 text-brass-dark px-3 py-1 rounded-lg mr-3 text-sm">{apps.length} Randevu</span>
                 {barberName}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -92,14 +93,14 @@ const AppointmentsDayView = () => {
                 isCompleted ? 'border-l-blue-500 border-t-border/60 border-r-border/60 border-b-border/60' : 
                 'border-l-red-500 border-t-border/60 border-r-border/60 border-b-border/60'
               )}>
-                <CardHeader className="bg-secondary/20 pb-4 border-b border-border/50 flex flex-row items-center justify-between space-y-0">
+                <CardHeader className="bg-cream-soft pb-4 border-b border-border/50 flex flex-row items-center justify-between space-y-0">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-gold-500/10 flex items-center justify-center border border-gold-500/20">
-                      <span className="font-bold text-gold-600">{app.customer_first_name.charAt(0)}{app.customer_last_name.charAt(0)}</span>
+                    <div className="w-10 h-10 rounded-full bg-brass/10 flex items-center justify-center border border-brass/20">
+                      <span className="font-bold text-brass-dark">{app.customer_first_name.charAt(0)}{app.customer_last_name.charAt(0)}</span>
                     </div>
                     <div>
                       <CardTitle className="text-lg font-bold">{app.customer_first_name} {app.customer_last_name}</CardTitle>
-                      <p className="text-xs text-muted-foreground">{app.phone}</p>
+                      <p className="text-xs text-ink/45">{app.phone}</p>
                     </div>
                   </div>
                   
@@ -117,20 +118,20 @@ const AppointmentsDayView = () => {
                 <CardContent className="p-5 flex-1 flex flex-col">
                   <div className="space-y-3 mb-6 flex-1">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-muted-foreground">Personel:</span>
-                      <span className="text-sm font-bold text-foreground">{app.barbers?.name || '-'}</span>
+                      <span className="text-sm font-medium text-ink/45">Personel:</span>
+                      <span className="text-sm font-bold text-ink">{app.barbers?.name || '-'}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-muted-foreground">Saat:</span>
-                      <span className="text-sm font-bold text-gold-600 bg-gold-500/10 px-2 py-1 rounded-md">{app.appointment_time}</span>
+                      <span className="text-sm font-medium text-ink/45">Saat:</span>
+                      <span className="text-sm font-bold text-brass-dark bg-brass/10 px-2 py-1 rounded-md">{app.appointment_time}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-muted-foreground">Hizmetler:</span>
+                      <span className="text-sm font-medium text-ink/45">Hizmetler:</span>
                       <span className="text-sm font-semibold text-right max-w-[60%] truncate" title={serviceNames}>{serviceNames}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-border/50">
-                      <span className="text-sm font-medium text-muted-foreground">Tutar:</span>
-                      <span className="text-lg font-bold text-foreground">₺{app.total_price}</span>
+                      <span className="text-sm font-medium text-ink/45">Tutar:</span>
+                      <span className="text-lg font-bold text-ink">₺{app.total_price}</span>
                     </div>
                   </div>
                   
@@ -172,7 +173,7 @@ const AppointmentsDayView = () => {
                         <Button 
                           variant="outline"
                           disabled
-                          className="flex-1 rounded-xl h-12 font-bold bg-secondary/20 border-transparent text-muted-foreground"
+                          className="flex-1 rounded-xl h-12 font-bold bg-cream-soft border-transparent text-ink/45"
                         >
                           İşlem Tamamlandı
                         </Button>
@@ -205,6 +206,12 @@ const AppointmentsDayView = () => {
       )}
     </div>
   );
+};
+
+const AppointmentsDayView = () => {
+  const { isAdmin } = useAuth();
+
+  return isAdmin ? <OwnerAppointmentsDayView /> : <StaffDayView />;
 };
 
 export default AppointmentsDayView;

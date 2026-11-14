@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import React, { useMemo, useState } from 'react';
+import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { addDays, format, startOfWeek, isSameDay } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAdminAppointments } from '../../hooks/useAdminAppointments';
-import { useSupabaseData } from '../../hooks/useSupabaseData';
-import { Loader2 } from 'lucide-react';
 
 const CalendarView = () => {
   const { appointments, loading: appointmentsLoading } = useAdminAppointments();
@@ -15,12 +13,20 @@ const CalendarView = () => {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
 
-  // Create 30-min intervals from 09:00 to 23:30
-  const timeSlots = Array.from({ length: 30 }).map((_, i) => {
-    const hours = Math.floor(i / 2) + 9;
-    const minutes = i % 2 === 0 ? "00" : "30";
-    return `${hours.toString().padStart(2, '0')}:${minutes}`;
-  });
+  // 30 dakikalık temel ızgara + randevuların gerçek saatleri (45 dk, 00:00 vb.)
+  const timeSlots = useMemo(() => {
+    const baseSlots = Array.from({ length: 30 }).map((_, i) => {
+      const hours = Math.floor(i / 2) + 9;
+      const minutes = i % 2 === 0 ? '00' : '30';
+      return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    });
+
+    const appointmentSlots = appointments
+      .map((appointment) => appointment.appointment_time.slice(0, 5))
+      .filter(Boolean);
+
+    return Array.from(new Set([...baseSlots, ...appointmentSlots])).sort();
+  }, [appointments]);
 
   const prevWeek = () => setCurrentDate(addDays(currentDate, -7));
   const nextWeek = () => setCurrentDate(addDays(currentDate, 7));
@@ -29,8 +35,8 @@ const CalendarView = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Haftalık Takvim</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Randevuları haftalık görünümde inceleyin ve yönetin.</p>
+          <h1 className="font-display text-2xl font-normal tracking-tight text-ink sm:text-3xl">Haftalık Takvim</h1>
+          <p className="mt-1 text-sm text-ink/50 sm:text-base">Randevuları haftalık görünümde inceleyin.</p>
         </div>
         <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto bg-white border border-border/60 shadow-sm rounded-xl p-1.5">
           <Button variant="ghost" className="rounded-lg h-10 px-2 sm:px-3 hover:bg-secondary/50" onClick={prevWeek}>
@@ -53,9 +59,9 @@ const CalendarView = () => {
                 <span className="text-sm font-medium text-muted-foreground">Saat</span>
               </div>
               {weekDays.map((day, i) => (
-                <div key={i} className={`p-4 text-center border-r last:border-r-0 bg-white ${isSameDay(day, new Date()) ? 'bg-gold-500/5' : ''}`}>
+                <div key={i} className={`p-4 text-center border-r last:border-r-0 bg-white ${isSameDay(day, new Date()) ? 'bg-brass/5' : ''}`}>
                   <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{format(day, 'EEEE', { locale: tr })}</div>
-                  <div className={`text-2xl mt-1.5 font-bold ${isSameDay(day, new Date()) ? 'text-gold-600' : 'text-foreground'}`}>
+                  <div className={`text-2xl mt-1.5 font-bold ${isSameDay(day, new Date()) ? 'text-brass-dark' : 'text-foreground'}`}>
                     {format(day, 'd')}
                   </div>
                 </div>
@@ -64,7 +70,7 @@ const CalendarView = () => {
             
             {appointmentsLoading ? (
               <div className="flex items-center justify-center h-[500px]">
-                <Loader2 className="w-8 h-8 animate-spin text-gold-500" />
+                <Loader2 className="w-8 h-8 animate-spin text-brass-dark" />
               </div>
             ) : (
               <div className="flex flex-col">
@@ -81,7 +87,7 @@ const CalendarView = () => {
                   );
 
                   return (
-                    <div key={dayIdx} className={`p-1.5 border-r last:border-r-0 flex flex-col gap-1.5 min-h-[100px] transition-colors ${isSameDay(day, new Date()) ? 'bg-gold-500/5' : 'hover:bg-secondary/10'}`}>
+                    <div key={dayIdx} className={`p-1.5 border-r last:border-r-0 flex flex-col gap-1.5 min-h-[100px] transition-colors ${isSameDay(day, new Date()) ? 'bg-brass/5' : 'hover:bg-secondary/10'}`}>
                       {slotAppointments.map(appointment => {
                         const serviceNames = appointment.appointment_services?.map(as => as.services?.name).join(', ') || 'Bilinmiyor';
                         const barberName = appointment.barbers?.name || 'Bilinmiyor';

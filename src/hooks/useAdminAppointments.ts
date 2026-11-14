@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,17 +15,20 @@ export type AdminAppointment = {
   barber_id: string | null;
   barbers?: { name: string };
   appointment_services?: {
-    services?: { name: string }
+    services?: { name: string };
   }[];
 };
 
 export const useAdminAppointments = () => {
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAdmin } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const { isAdmin } = useAuth();
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
     try {
       let query = supabase
         .from('appointments')
@@ -42,66 +45,79 @@ export const useAdminAppointments = () => {
       // Personel (admin olmayan) giriş yaptıysa, localStorage'dan barber_id'yi al
       if (!isAdmin) {
         const staffBarberId = localStorage.getItem('staff_barber_id');
-        
+
         if (staffBarberId) {
           query = query.eq('barber_id', staffBarberId);
         } else {
-          // Eğer giriş yapılmış ama ID yoksa, boş liste dönsün (güvenlik)
           setAppointments([]);
           setLoading(false);
           return;
         }
       }
 
-      const { data, error } = await query;
+      const { data, error: queryError } = await query;
 
-      if (error) throw error;
-      if (data) setAppointments(data as any);
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
+      if (queryError) throw queryError;
+      if (data) setAppointments(data as AdminAppointment[]);
+    } catch (err) {
+      console.error('Error fetching appointments:', err);
+      setError('Randevular yüklenemedi. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
-    fetchAppointments();
-  }, []);
+    void fetchAppointments();
+  }, [fetchAppointments]);
 
-  const updateStatus = async (id: string, newStatus: string) => {
+  const updateStatus = async (id: string, newStatus: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('appointments')
         .update({ status: newStatus })
         .eq('id', id);
 
-      if (error) throw error;
-      setAppointments(prev => prev.map(app => app.id === id ? { ...app, status: newStatus } : app));
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
-  };
-
-  const deleteAppointment = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        if (error.code === '42501') {
-          alert("Yetkisiz işlem: Sadece patron (admin) randevu silebilir.");
-        }
-        throw error;
-      }
-      setAppointments(prev => prev.filter(app => app.id !== id));
+      if (updateError) throw updateError;
+      setAppointments((prev) =>
+        prev.map((appointment) =>
+          appointment.id === id ? { ...appointment, status: newStatus } : appointment
+        )
+      );
       return true;
-    } catch (error) {
-      console.error('Error deleting appointment:', error);
+    } catch (err) {
+      console.error('Error updating status:', err);
       return false;
     }
   };
 
-  return { appointments, loading, updateStatus, deleteAppointment, refresh: fetchAppointments };
+  const deleteAppointment = async (id: string): Promise<boolean> => {
+    try {
+      const { error: deleteError } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        if (deleteError.code === '42501') {
+          alert('Yetkisiz işlem: Sadece patron (admin) randevu silebilir.');
+        }
+        throw deleteError;
+      }
+      setAppointments((prev) => prev.filter((appointment) => appointment.id !== id));
+      return true;
+    } catch (err) {
+      console.error('Error deleting appointment:', err);
+      return false;
+    }
+  };
+
+  return {
+    appointments,
+    loading,
+    error,
+    updateStatus,
+    deleteAppointment,
+    refresh: fetchAppointments,
+  };
 };

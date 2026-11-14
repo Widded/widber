@@ -64,14 +64,16 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   }
 
   return (
-    <div ref={widgetRef} className="relative bg-white/95 p-4 md:p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-black/5 flex flex-col md:flex-row items-center gap-4">
+    <div ref={widgetRef} className="relative bg-white/95 text-ink p-4 md:p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-black/5 flex flex-col md:flex-row items-center gap-4">
       
       <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
         
         {/* SERVICE */}
         <div className="relative">
           <button 
+            type="button"
             onClick={() => setActivePopover(activePopover === 'service' ? null : 'service')}
+            aria-expanded={activePopover === 'service'}
             className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'service' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
           >
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'service' ? 'bg-white/20' : 'bg-white')}>
@@ -92,6 +94,9 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
                     return (
                       <button 
                         key={srv.id} 
+                        type="button"
+                        role="checkbox"
+                        aria-checked={isSelected}
                         onClick={() => { 
                           if (isSelected) {
                             setServices(appointment.services.filter(s => s.id !== srv.id));
@@ -120,7 +125,9 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         {/* BARBER */}
         <div className="relative">
           <button 
+            type="button"
             onClick={() => setActivePopover(activePopover === 'barber' ? null : 'barber')}
+            aria-expanded={activePopover === 'barber'}
             className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'barber' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
           >
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'barber' ? 'bg-white/20' : 'bg-white')}>
@@ -151,7 +158,9 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         {/* DATE */}
         <div className="relative">
           <button 
+            type="button"
             onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
+            aria-expanded={activePopover === 'date'}
             className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'date' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
           >
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'date' ? 'bg-white/20' : 'bg-white')}>
@@ -186,7 +195,9 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         {/* TIME */}
         <div className="relative">
           <button 
+            type="button"
             onClick={() => setActivePopover(activePopover === 'time' ? null : 'time')}
+            aria-expanded={activePopover === 'time'}
             className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'time' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
           >
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'time' ? 'bg-white/20' : 'bg-white')}>
@@ -238,14 +249,16 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
       
       {/* SUBMIT BUTTON */}
       <button 
+        type="button"
         onClick={handleNext} 
+        aria-label="Seçimleri onayla ve randevu formuna geç"
         className={cn("w-full md:w-auto mt-2 md:mt-0 md:ml-2 h-14 md:h-[68px] md:w-[68px] rounded-2xl flex items-center justify-center transition-all shadow-sm group", 
           (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) 
           ? "bg-black text-white hover:scale-105 active:scale-95" 
           : "bg-gray-200 text-gray-400"
         )}
       >
-        <ArrowRight className={cn("w-6 h-6", (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) ? "group-hover:translate-x-1 transition-transform" : "")} />
+        <ArrowRight className={cn("w-6 h-6", (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) ? "group-hover:translate-x-1 transition-transform" : "")} aria-hidden="true" />
       </button>
 
     </div>

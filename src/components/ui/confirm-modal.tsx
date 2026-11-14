@@ -55,7 +55,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                   <div className={`p-3 rounded-xl ${
                     type === 'danger' ? 'bg-red-50 text-red-600' :
                     type === 'success' ? 'bg-green-50 text-green-600' :
-                    'bg-gold-500/10 text-gold-600'
+                    'bg-brass/10 text-brass-dark'
                   }`}>
                     {type === 'success' ? <CheckCircle2 className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
                   </div>
@@ -83,7 +83,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     className={`rounded-xl font-bold px-6 ${
                       type === 'danger' ? 'bg-red-600 hover:bg-red-700 text-white' :
                       type === 'success' ? 'bg-green-600 hover:bg-green-700 text-white' :
-                      'bg-gold-500 hover:bg-gold-600 text-white'
+                      'bg-ink hover:bg-ink-soft text-cream'
                     }`}
                   >
                     {confirmText}

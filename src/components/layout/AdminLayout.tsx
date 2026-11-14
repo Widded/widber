@@ -1,127 +1,216 @@
 import React from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Users, Home, LogOut, Scissors, User, Clock } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import {
+  CalendarDays,
+  CalendarRange,
+  Clock3,
+  Home,
+  LayoutDashboard,
+  LogOut,
+  Scissors,
+  ShieldCheck,
+  UserRound,
+  Users,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { cn } from '../../lib/utils';
+
+const navSections = [
+  {
+    label: 'Genel',
+    items: [
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
+      { icon: CalendarDays, label: 'Randevular', path: '/admin/appointments' },
+      { icon: CalendarRange, label: 'Takvim', path: '/admin/calendar' },
+    ],
+  },
+  {
+    label: 'Yönetim',
+    items: [
+      { icon: Scissors, label: 'Hizmetler', path: '/admin/services' },
+      { icon: UserRound, label: 'Personeller', path: '/admin/barbers' },
+      { icon: Clock3, label: 'Müsaitlik', path: '/admin/availability' },
+    ],
+  },
+];
+
+const mobileNav = [
+  { icon: LayoutDashboard, label: 'Panel', path: '/admin/dashboard' },
+  { icon: CalendarDays, label: 'Randevu', path: '/admin/appointments' },
+  { icon: Scissors, label: 'Hizmet', path: '/admin/services' },
+  { icon: Users, label: 'Personel', path: '/admin/barbers' },
+  { icon: Clock3, label: 'Mesai', path: '/admin/availability' },
+];
 
 const AdminLayout = () => {
   const location = useLocation();
-  const { signOut, isAdmin, staffBarber } = useAuth();
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const email = user?.email || 'patron@widber.com';
+  const initial = email.charAt(0).toUpperCase();
 
   const handleLogout = async () => {
     await signOut();
     navigate('/admin/login');
   };
 
-  const navItems = [
-    ...(isAdmin ? [{ icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' }] : []),
-    { icon: Users, label: 'Randevular', path: '/admin/appointments' },
-    ...(isAdmin ? [{ icon: Scissors, label: 'Hizmetler', path: '/admin/services' }] : []),
-    ...(isAdmin ? [{ icon: User, label: 'Personeller', path: '/admin/barbers' }] : []),
-    { icon: Clock, label: 'Müsaitlik', path: '/admin/availability' },
-    { icon: Calendar, label: 'Takvim', path: '/admin/calendar' },
-  ];
+  const isActive = (path: string) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   return (
-    <div className="flex min-h-screen bg-secondary/10">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border/60 bg-white px-4 py-6 hidden md:flex flex-col shadow-sm">
-        <div className="mb-8 px-2 flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Admin<span className="text-gold-600">Panel</span></h2>
+    <div className="flex min-h-screen bg-cream font-sans text-ink">
+      {/* Desktop Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-ink/10 bg-cream-soft px-5 py-6 lg:flex">
+        <Link to="/admin/dashboard" className="flex items-baseline gap-1 px-2" aria-label="WidBer yönetim paneli">
+          <span className="font-display text-2xl font-semibold tracking-tight text-ink">WidBer</span>
+          <span className="mb-1 h-1.5 w-1.5 rounded-full bg-brass" aria-hidden="true" />
+        </Link>
+        <p className="mt-1 px-2 text-[9px] font-bold uppercase tracking-[0.24em] text-ink/35">
+          Yönetim
+        </p>
+
+        <div className="mt-7 rounded-2xl border border-ink/10 bg-white p-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink font-display text-base text-cream">
+              {initial}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink">Patron</p>
+              <p className="truncate text-[10px] text-ink/40">{email}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-brass/10 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-brass-dark">
+            <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+            Tam yetki
+          </div>
         </div>
-        <nav className="flex-1 space-y-2">
-          {navItems.map((item) => {
-            const isActive = location.pathname.startsWith(item.path);
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center space-x-3 rounded-lg px-3 py-2.5 transition-all font-medium",
-                  isActive 
-                    ? "bg-gold-500/10 text-gold-700" 
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+
+        <nav className="mt-7 flex-1 space-y-6" aria-label="Yönetim menüsü">
+          {navSections.map((section) => (
+            <div key={section.label}>
+              <p className="px-3 text-[9px] font-bold uppercase tracking-[0.2em] text-ink/30">
+                {section.label}
+              </p>
+              <div className="mt-2 space-y-1">
+                {section.items.map((item) => {
+                  const active = isActive(item.path);
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+                        active
+                          ? 'bg-ink text-cream shadow-[0_8px_20px_-12px_rgba(23,19,16,0.6)]'
+                          : 'text-ink/55 hover:bg-ink/5 hover:text-ink'
+                      )}
+                    >
+                      <Icon
+                        className={cn('h-4 w-4', active ? 'text-brass' : 'text-ink/40')}
+                        aria-hidden="true"
+                      />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
-        <div className="mt-auto pt-4 border-t border-border/60">
-          <div className="mb-4 px-3 py-2 flex items-center space-x-3 bg-secondary/30 rounded-xl border border-border/50">
-            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-border/80 shadow-sm">
-              <User className="w-5 h-5 text-gold-600" />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold text-foreground truncate">
-                {isAdmin ? 'Patron' : staffBarber?.name || 'Personel'}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {isAdmin ? 'Yönetici Hesabı' : 'Personel Hesabı'}
-              </p>
-            </div>
-          </div>
-          
-          <Link to="/" className="flex items-center space-x-3 rounded-lg px-3 py-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-all">
-             <Home className="h-5 w-5" />
-             <span>Siteye Dön</span>
+
+        <div className="mt-6 space-y-1 border-t border-ink/10 pt-4">
+          <Link
+            to="/"
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink"
+          >
+            <Home className="h-4 w-4" aria-hidden="true" />
+            Siteye Dön
           </Link>
-          <div className="mt-2">
-            <button 
-              onClick={handleLogout}
-              className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg text-sm font-medium transition-colors text-red-500 hover:bg-red-500/10"
-            >
-              <LogOut className="w-5 h-5" />
-              <span>Çıkış Yap</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            Çıkış Yap
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col pb-20 md:pb-0"> {/* Mobile padding for bottom nav */}
-        <header className="h-16 border-b border-border/60 bg-white flex items-center justify-between px-6 md:hidden shadow-sm sticky top-0 z-10">
-           <h2 className="text-xl font-bold tracking-tight text-foreground">Admin<span className="text-gold-600">Panel</span></h2>
-           <button onClick={handleLogout} className="text-red-500 p-2">
-             <LogOut className="w-5 h-5" />
-           </button>
-        </header>
-        <div className="p-4 md:p-8 flex-1 overflow-auto">
-          <Outlet />
-        </div>
-      </main>
-
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-border/60 flex items-center justify-around px-2 py-2 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.path);
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex flex-col items-center justify-center p-2 min-w-[60px] rounded-xl transition-all",
-                isActive 
-                  ? "text-gold-600 bg-gold-50" 
-                  : "text-muted-foreground hover:bg-secondary/50"
-              )}
-            >
-              <item.icon className={cn("h-5 w-5 mb-1", isActive && "fill-gold-600/20")} />
-              <span className="text-[10px] font-bold tracking-tight truncate w-full text-center">{item.label}</span>
+      {/* Main */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 border-b border-ink/10 bg-cream/95 backdrop-blur-xl lg:hidden">
+          <div className="flex h-16 items-center justify-between px-4">
+            <Link to="/admin/dashboard" className="flex items-baseline gap-1" aria-label="WidBer yönetim paneli">
+              <span className="font-display text-xl font-semibold text-ink">WidBer</span>
+              <span className="mb-1 h-1.5 w-1.5 rounded-full bg-brass" aria-hidden="true" />
             </Link>
-          );
-        })}
-        <Link
-          to="/"
-          className="flex flex-col items-center justify-center p-2 min-w-[60px] rounded-xl transition-all text-muted-foreground hover:bg-secondary/50"
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink font-display text-sm text-cream">
+                {initial}
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                aria-label="Çıkış yap"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-ink/10 bg-white text-ink/45 transition-colors hover:text-red-600"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-5 md:px-6 md:pb-8 md:pt-7 lg:px-10 lg:pb-12 lg:pt-9">
+          <Outlet />
+        </main>
+
+        <nav
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-ink/10 bg-cream/95 backdrop-blur-xl lg:hidden"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          aria-label="Alt menü"
         >
-          <Home className="h-5 w-5 mb-1" />
-          <span className="text-[10px] font-bold tracking-tight truncate w-full text-center">Site</span>
-        </Link>
-      </nav>
+          <div className="grid grid-cols-5">
+            {mobileNav.map((item) => {
+              const active = isActive(item.path);
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  aria-current={active ? 'page' : undefined}
+                  className="relative flex min-h-16 flex-col items-center justify-center gap-1 px-1 pb-2 pt-2.5"
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0 h-0.5 w-8 rounded-full bg-brass transition-opacity',
+                      active ? 'opacity-100' : 'opacity-0'
+                    )}
+                    aria-hidden="true"
+                  />
+                  <Icon
+                    className={cn('h-5 w-5', active ? 'text-brass-dark' : 'text-ink/40')}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className={cn(
+                      'text-[9px] font-semibold',
+                      active ? 'text-brass-dark' : 'text-ink/40'
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 };

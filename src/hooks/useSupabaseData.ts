@@ -38,7 +38,7 @@ export const useSupabaseData = () => {
           .from('settings')
           .select('*')
           .eq('key', 'working_hours')
-          .single();
+          .maybeSingle();
         
         if (settingsError && settingsError.code !== 'PGRST116') throw settingsError;
         if (settingsData && settingsData.value) {

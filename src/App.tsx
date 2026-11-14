@@ -12,14 +12,17 @@ import BarbersManagement from './pages/admin/BarbersManagement';
 import AvailabilityManagement from './pages/admin/AvailabilityManagement';
 import Login from './pages/admin/Login';
 import Layout from './components/layout/Layout';
-import AdminLayout from './components/layout/AdminLayout';
+import RoleLayout from './components/layout/RoleLayout';
+import OwnerOnlyRoute from './components/layout/OwnerOnlyRoute';
+import StaffOnlyRoute from './components/layout/StaffOnlyRoute';
 import ProtectedRoute from './components/layout/ProtectedRoute';
+import StaffDashboard from './pages/staff/StaffDashboard';
 import NotFound from './pages/NotFound';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const AdminIndexRedirect = () => {
   const { isAdmin } = useAuth();
-  return <Navigate to={isAdmin ? "/admin/dashboard" : "/admin/appointments"} replace />;
+  return <Navigate to={isAdmin ? '/admin/dashboard' : '/admin/staff'} replace />;
 };
 
 function App() {
@@ -27,32 +30,44 @@ function App() {
     <Router>
       <AuthProvider>
         <BookingProvider>
-        <Routes>
-          {/* Client Routes */}
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="booking" element={<BookingWizard />} />
-          </Route>
-
-          {/* Admin Routes */}
-          <Route path="/admin/login" element={<Login />} />
-          
-          <Route path="/admin" element={<ProtectedRoute />}>
-            <Route element={<AdminLayout />}>
-              <Route index element={<AdminIndexRedirect />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="appointments" element={<AppointmentsList />} />
-            <Route path="appointments/:date" element={<AppointmentsDayView />} />
-            <Route path="services" element={<ServicesManagement />} />
-            <Route path="barbers" element={<BarbersManagement />} />
-            <Route path="availability" element={<AvailabilityManagement />} />
-            <Route path="calendar" element={<CalendarView />} />
+          <Routes>
+            {/* Client Routes */}
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="booking" element={<BookingWizard />} />
             </Route>
-          </Route>
 
-          {/* Catch-all 404 Route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* Admin / Staff Login */}
+            {/* /admin/login       -> Personel girişi */}
+            {/* /admin/login/staff -> Yönetici girişi */}
+            <Route path="/admin/login" element={<Login mode="staff" />} />
+            <Route path="/admin/login/staff" element={<Login mode="admin" />} />
+
+            {/* Protected Admin / Staff Area */}
+            <Route path="/admin" element={<ProtectedRoute />}>
+              <Route element={<RoleLayout />}>
+                <Route index element={<AdminIndexRedirect />} />
+
+                <Route element={<StaffOnlyRoute />}>
+                  <Route path="staff" element={<StaffDashboard />} />
+                </Route>
+
+                <Route path="appointments" element={<AppointmentsList />} />
+                <Route path="appointments/:date" element={<AppointmentsDayView />} />
+                <Route path="availability" element={<AvailabilityManagement />} />
+                <Route path="calendar" element={<CalendarView />} />
+
+                <Route element={<OwnerOnlyRoute />}>
+                  <Route path="dashboard" element={<AdminDashboard />} />
+                  <Route path="services" element={<ServicesManagement />} />
+                  <Route path="barbers" element={<BarbersManagement />} />
+                </Route>
+              </Route>
+            </Route>
+
+            {/* Catch-all 404 Route */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </BookingProvider>
       </AuthProvider>
     </Router>

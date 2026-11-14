@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { Modal } from '../../components/ui/modal';
-import { Loader2, Plus, Edit2, Trash2, User, Save, X } from 'lucide-react';
+import {
+  Clock3,
+  Edit2,
+  KeyRound,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  UserRound,
+} from 'lucide-react';
 import { Barber } from '../../context/BookingContext';
 
 const BarbersManagement = () => {
@@ -14,6 +22,7 @@ const BarbersManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   // Form State
   const [name, setName] = useState('');
@@ -33,10 +42,10 @@ const BarbersManagement = () => {
     type: 'warning',
     title: '',
     description: '',
-    onConfirm: () => {}
+    onConfirm: () => {},
   });
 
-  const closeModal = () => setModalState(prev => ({ ...prev, isOpen: false }));
+  const closeModal = () => setModalState((prev) => ({ ...prev, isOpen: false }));
 
   const fetchBarbers = async () => {
     setLoading(true);
@@ -56,7 +65,7 @@ const BarbersManagement = () => {
   };
 
   useEffect(() => {
-    fetchBarbers();
+    void fetchBarbers();
   }, []);
 
   const resetForm = () => {
@@ -66,7 +75,7 @@ const BarbersManagement = () => {
     setEditingId(null);
   };
 
-  const handleEditClick = (barber: any) => {
+  const handleEditClick = (barber: Barber) => {
     setName(barber.name);
     setPin(barber.pin || '');
     setEditingId(barber.id);
@@ -84,41 +93,42 @@ const BarbersManagement = () => {
 
     try {
       if (editingId) {
-        // Update
         const { error } = await supabase
           .from('barbers')
           .update(payload)
           .eq('id', editingId);
-        
+
         if (error) throw error;
       } else {
-        // Insert
-        const { error } = await supabase
-          .from('barbers')
-          .insert([payload]);
-          
+        const { error } = await supabase.from('barbers').insert([payload]);
+
         if (error) throw error;
       }
-      
+
       resetForm();
-      fetchBarbers();
+      void fetchBarbers();
       setModalState({
         isOpen: true,
         type: 'success',
         title: 'Başarılı',
         description: 'Personel başarıyla kaydedildi.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     } catch (error) {
       console.error('Personel kaydedilirken hata:', error);
+      const supabaseError = error as { code?: string; message?: string };
+
       setModalState({
         isOpen: true,
         type: 'danger',
         title: 'Hata',
-        description: 'Personel kaydedilirken bir hata oluştu.',
+        description:
+          supabaseError?.code === '42501'
+            ? 'Yetki hatası: Personel eklemek için patron hesabıyla giriş yapmalısınız.'
+            : supabaseError?.message || 'Personel kaydedilirken bir hata oluştu.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     }
   };
@@ -128,29 +138,27 @@ const BarbersManagement = () => {
       isOpen: true,
       type: 'danger',
       title: 'Personeli Sil',
-      description: 'Bu personeli kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+      description:
+        'Bu personeli kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
       confirmText: 'Evet, Sil',
       cancelText: 'İptal',
-      onConfirm: () => executeDelete(id)
+      onConfirm: () => void executeDelete(id),
     });
   };
 
   const executeDelete = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('barbers')
-        .delete()
-        .eq('id', id);
-        
+      const { error } = await supabase.from('barbers').delete().eq('id', id);
+
       if (error) throw error;
-      fetchBarbers();
+      void fetchBarbers();
       setModalState({
         isOpen: true,
         type: 'success',
         title: 'Başarılı',
         description: 'Personel başarıyla silindi.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     } catch (error) {
       console.error('Personel silinirken hata:', error);
@@ -160,118 +168,240 @@ const BarbersManagement = () => {
         title: 'Hata',
         description: 'Personel silinirken bir hata oluştu.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     }
   };
 
+  const filteredBarbers = barbers.filter((barber) =>
+    barber.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
+
+  const withPin = barbers.filter((barber) => Boolean(barber.pin)).length;
+  const withHours = barbers.filter((barber) => (barber.working_hours?.length ?? 0) > 0).length;
+
+  const getInitials = (value: string) =>
+    value
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join('');
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Personel Yönetimi</h1>
-          <p className="text-muted-foreground mt-1">Dükkanda çalışan berberleri/personelleri buradan yönetebilirsiniz.</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brass-dark">
+            Yönetim
+          </p>
+          <h1 className="mt-1 font-display text-3xl leading-tight text-ink md:text-4xl">
+            Personeller
+          </h1>
+          <p className="mt-1 text-sm text-ink/45">
+            Ekibi, giriş PIN'lerini ve mesai durumunu yönetin.
+          </p>
         </div>
-        {!isAdding && (
-          <Button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white hover:bg-amber-600 rounded-xl px-6 h-12 font-bold uppercase tracking-wide transition-colors">
-            <Plus className="w-5 h-5 mr-2" />
-            Yeni Personel Ekle
-          </Button>
-        )}
+
+        <Button
+          onClick={() => setIsAdding(true)}
+          className="h-11 rounded-full bg-ink px-5 text-xs font-semibold text-cream hover:bg-ink-soft"
+        >
+          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Yeni Personel
+        </Button>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {[
+          { icon: UserRound, label: 'Toplam personel', value: barbers.length },
+          { icon: KeyRound, label: 'Giriş yetkisi olan', value: withPin },
+          { icon: Clock3, label: 'Mesaisi tanımlı', value: withHours },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-white p-4"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brass/10 text-brass-dark">
+              <item.icon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink/35">
+                {item.label}
+              </p>
+              <p className="mt-0.5 font-display text-xl leading-none text-ink">{item.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/30"
+          aria-hidden="true"
+        />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Personel ara..."
+          className="h-11 rounded-xl border-ink/10 bg-white pl-10 text-sm focus-visible:ring-brass"
+        />
+      </div>
+
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-56 animate-pulse rounded-2xl border border-ink/10 bg-white/60" />
+          ))}
+        </div>
+      ) : filteredBarbers.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-ink/15 bg-white p-10 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brass/10 text-brass-dark">
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-ink">
+            {barbers.length === 0 ? 'Henüz personel eklenmemiş.' : 'Aramanızla eşleşen personel yok.'}
+          </p>
+          <p className="mt-1 text-xs text-ink/45">
+            {barbers.length === 0
+              ? 'İlk personeli ekleyerek ekibi oluşturun.'
+              : 'Farklı bir arama deneyin.'}
+          </p>
+          {barbers.length === 0 && (
+            <Button
+              onClick={() => setIsAdding(true)}
+              className="mt-4 h-10 rounded-full bg-ink px-5 text-xs font-semibold text-cream hover:bg-ink-soft"
+            >
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Yeni Personel
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredBarbers.map((barber) => {
+            const hours = barber.working_hours?.length ?? 0;
+
+            return (
+              <article
+                key={barber.id}
+                className="group flex flex-col rounded-2xl border border-ink/10 bg-white p-5 transition-all hover:border-brass/40 hover:shadow-[0_20px_45px_-30px_rgba(23,19,16,0.35)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ink font-display text-lg text-cream">
+                    {getInitials(barber.name)}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleEditClick(barber)}
+                      aria-label={`${barber.name} personelini düzenle`}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink"
+                    >
+                      <Edit2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClick(barber.id)}
+                      aria-label={`${barber.name} personelini sil`}
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <h3 className="mt-4 font-display text-2xl leading-tight text-ink">{barber.name}</h3>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink/35">
+                  Usta Berber
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {barber.pin ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-ink/[0.04] px-2.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.14em] text-ink/70">
+                      <KeyRound className="h-3 w-3 text-brass-dark" aria-hidden="true" />
+                      {barber.pin}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-700">
+                      <KeyRound className="h-3 w-3" aria-hidden="true" />
+                      Giriş yetkisi yok
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-ink/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-ink/55">
+                    <Clock3 className="h-3 w-3" aria-hidden="true" />
+                    {hours > 0 ? `${hours} saat tanımlı` : 'Mesai tanımsız'}
+                  </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       <Modal
         isOpen={isAdding}
         onClose={resetForm}
         title={editingId ? 'Personeli Düzenle' : 'Yeni Personel Ekle'}
-        icon={<User className="w-5 h-5 text-gold-600" />}
+        icon={<UserRound className="h-5 w-5 text-brass-dark" />}
       >
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name" className="font-semibold text-foreground text-sm">Personel Adı</Label>
-              <Input 
-                id="name" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Örn: Ahmet Yılmaz"
-                className="rounded-xl border-border py-6 focus-visible:ring-gold-500"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pin" className="font-semibold text-foreground text-sm">Giriş PIN Kodu (6 Hane)</Label>
-              <Input 
-                id="pin" 
-                type="text"
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="Örn: 123456"
-                className="rounded-xl border-border py-6 focus-visible:ring-gold-500 tracking-widest font-mono text-lg"
-              />
-              <p className="text-xs text-muted-foreground">Personelin sisteme giriş yapabilmesi için isteğe bağlıdır.</p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="name" className="text-xs font-semibold text-ink/60">
+              Personel Adı
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Örn: Ahmet Yılmaz"
+              className="h-12 rounded-xl border-ink/10 bg-white focus-visible:ring-brass"
+              required
+            />
           </div>
-          <div className="flex justify-end space-x-3 pt-4 mt-6">
-            <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl px-6 h-12 font-semibold">
+
+          <div className="space-y-2">
+            <Label htmlFor="pin" className="text-xs font-semibold text-ink/60">
+              Giriş PIN Kodu (6 Hane)
+            </Label>
+            <Input
+              id="pin"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+              placeholder="Örn: 123456"
+              className="h-12 rounded-xl border-ink/10 bg-white font-mono text-lg tracking-[0.3em] focus-visible:ring-brass"
+            />
+            <p className="text-[11px] leading-relaxed text-ink/40">
+              Personelin sisteme giriş yapabilmesi için gereklidir. Boş bırakırsanız giriş yetkisi
+              olmaz.
+            </p>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-ink/10 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetForm}
+              className="h-11 rounded-xl px-5 text-xs font-semibold"
+            >
               İptal
             </Button>
-            <Button type="submit" className="bg-gold-500 hover:bg-gold-600 text-white rounded-xl px-8 h-12 font-bold transition-colors">
-              <Save className="w-4 h-4 mr-2" />
+            <Button
+              type="submit"
+              className="h-11 rounded-xl bg-ink px-6 text-xs font-semibold text-cream hover:bg-ink-soft"
+            >
+              <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Kaydet
             </Button>
           </div>
         </form>
       </Modal>
 
-      <Card className="bg-white border border-border/60 shadow-md rounded-2xl overflow-hidden">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center p-12">
-              <Loader2 className="w-8 h-8 animate-spin text-gold-500" />
-            </div>
-          ) : barbers.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground font-medium">
-              Henüz hiç personel eklenmemiş.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-              {barbers.map(barber => (
-                <div key={barber.id} className="flex flex-col items-center p-6 border border-border rounded-xl hover:border-gold-500/50 hover:shadow-sm transition-all group bg-secondary/10">
-                  <div className="w-20 h-20 bg-white border border-border rounded-full flex items-center justify-center shadow-sm mb-4">
-                    <User className="w-8 h-8 text-gold-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground">{barber.name}</h3>
-                  {/* @ts-ignore */}
-                  {barber.pin && <p className="text-sm font-mono tracking-widest text-gold-600 font-bold mb-4">PIN: {barber.pin}</p>}
-                  {!barber.pin && <p className="text-sm text-muted-foreground mb-4 italic">Giriş yetkisi yok</p>}
-                  <div className="flex items-center space-x-2 w-full mt-auto">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleEditClick(barber)}
-                      className="flex-1 rounded-lg border-border hover:bg-white text-foreground font-medium h-10"
-                    >
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Düzenle
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => handleDeleteClick(barber.id)}
-                      className="flex-1 rounded-lg h-10 font-medium bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Sil
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={modalState.isOpen}
         onClose={closeModal}
         onConfirm={modalState.onConfirm}

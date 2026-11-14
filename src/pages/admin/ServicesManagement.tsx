@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { Modal } from '../../components/ui/modal';
-import { Loader2, Plus, Edit2, Trash2, Scissors, Save, X } from 'lucide-react';
+import {
+  Banknote,
+  Clock3,
+  Edit2,
+  Plus,
+  Save,
+  Scissors,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { Service } from '../../context/BookingContext';
 
 const ServicesManagement = () => {
@@ -14,6 +22,7 @@ const ServicesManagement = () => {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   // Form State
   const [name, setName] = useState('');
@@ -34,10 +43,10 @@ const ServicesManagement = () => {
     type: 'warning',
     title: '',
     description: '',
-    onConfirm: () => {}
+    onConfirm: () => {},
   });
 
-  const closeModal = () => setModalState(prev => ({ ...prev, isOpen: false }));
+  const closeModal = () => setModalState((prev) => ({ ...prev, isOpen: false }));
 
   const fetchServices = async () => {
     setLoading(true);
@@ -57,7 +66,7 @@ const ServicesManagement = () => {
   };
 
   useEffect(() => {
-    fetchServices();
+    void fetchServices();
   }, []);
 
   const resetForm = () => {
@@ -82,47 +91,48 @@ const ServicesManagement = () => {
 
     const payload = {
       name,
-      price: parseInt(price),
-      duration: parseInt(duration)
+      price: Number(price),
+      duration: parseInt(duration),
     };
 
     try {
       if (editingId) {
-        // Update
         const { error } = await supabase
           .from('services')
           .update(payload)
           .eq('id', editingId);
-        
+
         if (error) throw error;
       } else {
-        // Insert
-        const { error } = await supabase
-          .from('services')
-          .insert([payload]);
-          
+        const { error } = await supabase.from('services').insert([payload]);
+
         if (error) throw error;
       }
-      
+
       resetForm();
-      fetchServices();
+      void fetchServices();
       setModalState({
         isOpen: true,
         type: 'success',
         title: 'Başarılı',
         description: 'Hizmet başarıyla kaydedildi.',
         onConfirm: closeModal,
-        cancelText: '' // Hide cancel button basically, or we can just let it have one
+        cancelText: '',
       });
     } catch (error) {
       console.error('Hizmet kaydedilirken hata:', error);
+      const supabaseError = error as { code?: string; message?: string };
+
       setModalState({
         isOpen: true,
         type: 'danger',
         title: 'Hata',
-        description: 'Hizmet kaydedilirken bir hata oluştu.',
+        description:
+          supabaseError?.code === '42501'
+            ? 'Yetki hatası: Hizmet eklemek için patron hesabıyla giriş yapmalısınız.'
+            : supabaseError?.message || 'Hizmet kaydedilirken bir hata oluştu.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     }
   };
@@ -135,26 +145,23 @@ const ServicesManagement = () => {
       description: 'Bu hizmeti kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
       confirmText: 'Evet, Sil',
       cancelText: 'İptal',
-      onConfirm: () => executeDelete(id)
+      onConfirm: () => void executeDelete(id),
     });
   };
 
   const executeDelete = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('services')
-        .delete()
-        .eq('id', id);
-        
+      const { error } = await supabase.from('services').delete().eq('id', id);
+
       if (error) throw error;
-      fetchServices();
+      void fetchServices();
       setModalState({
         isOpen: true,
         type: 'success',
         title: 'Başarılı',
         description: 'Hizmet başarıyla silindi.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     } catch (error) {
       console.error('Hizmet silinirken hata:', error);
@@ -164,139 +171,250 @@ const ServicesManagement = () => {
         title: 'Hata',
         description: 'Hizmet silinirken bir hata oluştu.',
         onConfirm: closeModal,
-        cancelText: ''
+        cancelText: '',
       });
     }
   };
 
+  const filteredServices = services.filter((service) =>
+    service.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
+
+  const averagePrice =
+    services.length > 0
+      ? Math.round(services.reduce((sum, service) => sum + Number(service.price), 0) / services.length)
+      : 0;
+  const averageDuration =
+    services.length > 0
+      ? Math.round(
+          services.reduce((sum, service) => sum + Number(service.duration), 0) / services.length
+        )
+      : 0;
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Hizmet Yönetimi</h1>
-          <p className="text-muted-foreground mt-1">Sistemdeki tüm hizmetleri ve fiyatlarını buradan yönetebilirsiniz.</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brass-dark">
+            Yönetim
+          </p>
+          <h1 className="mt-1 font-display text-3xl leading-tight text-ink md:text-4xl">
+            Hizmetler
+          </h1>
+          <p className="mt-1 text-sm text-ink/45">
+            Menüyü, fiyatları ve süreleri buradan yönetin.
+          </p>
         </div>
-        {!isAdding && (
-          <Button onClick={() => setIsAdding(true)} className="bg-stone-900 text-white hover:bg-amber-600 rounded-xl px-6 h-12 font-bold uppercase tracking-wide transition-colors">
-            <Plus className="w-5 h-5 mr-2" />
-            Yeni Hizmet Ekle
-          </Button>
-        )}
+
+        <Button
+          onClick={() => setIsAdding(true)}
+          className="h-11 rounded-full bg-ink px-5 text-xs font-semibold text-cream hover:bg-ink-soft"
+        >
+          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Yeni Hizmet
+        </Button>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {[
+          { icon: Scissors, label: 'Toplam hizmet', value: services.length },
+          { icon: Banknote, label: 'Ortalama fiyat', value: `₺${averagePrice}` },
+          { icon: Clock3, label: 'Ortalama süre', value: `${averageDuration} dk` },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-white p-4"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brass/10 text-brass-dark">
+              <item.icon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink/35">
+                {item.label}
+              </p>
+              <p className="mt-0.5 font-display text-xl leading-none text-ink">{item.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search
+          className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/30"
+          aria-hidden="true"
+        />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Hizmet ara..."
+          className="h-11 rounded-xl border-ink/10 bg-white pl-10 text-sm focus-visible:ring-brass"
+        />
+      </div>
+
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-44 animate-pulse rounded-2xl border border-ink/10 bg-white/60" />
+          ))}
+        </div>
+      ) : filteredServices.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-ink/15 bg-white p-10 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brass/10 text-brass-dark">
+            <Scissors className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-ink">
+            {services.length === 0 ? 'Henüz hizmet eklenmemiş.' : 'Aramanızla eşleşen hizmet yok.'}
+          </p>
+          <p className="mt-1 text-xs text-ink/45">
+            {services.length === 0
+              ? 'İlk hizmeti ekleyerek menüyü oluşturun.'
+              : 'Farklı bir arama deneyin.'}
+          </p>
+          {services.length === 0 && (
+            <Button
+              onClick={() => setIsAdding(true)}
+              className="mt-4 h-10 rounded-full bg-ink px-5 text-xs font-semibold text-cream hover:bg-ink-soft"
+            >
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Yeni Hizmet
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredServices.map((service) => (
+            <article
+              key={service.id}
+              className="group flex flex-col rounded-2xl border border-ink/10 bg-white p-5 transition-all hover:border-brass/40 hover:shadow-[0_20px_45px_-30px_rgba(23,19,16,0.35)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brass/10 text-brass-dark">
+                  <Scissors className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleEditClick(service)}
+                    aria-label={`${service.name} hizmetini düzenle`}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink"
+                  >
+                    <Edit2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteClick(service.id)}
+                    aria-label={`${service.name} hizmetini sil`}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
+              <h3 className="mt-4 font-display text-2xl leading-tight text-ink">{service.name}</h3>
+
+              <div className="mt-5 flex items-end justify-between border-t border-ink/10 pt-4">
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink/35">
+                    Fiyat
+                  </p>
+                  <p className="mt-0.5 font-display text-2xl text-ink">
+                    ₺{Number(service.price).toLocaleString('tr-TR')}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-ink/[0.04] px-3 py-1.5 text-[10px] font-semibold text-ink/55">
+                  <Clock3 className="h-3 w-3" aria-hidden="true" />
+                  {service.duration} dk
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
 
       <Modal
         isOpen={isAdding}
         onClose={resetForm}
         title={editingId ? 'Hizmeti Düzenle' : 'Yeni Hizmet Ekle'}
-        icon={<Scissors className="w-5 h-5 text-gold-600" />}
+        icon={<Scissors className="h-5 w-5 text-brass-dark" />}
         maxWidth="max-w-3xl"
       >
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="name" className="font-semibold text-foreground text-sm">Hizmet Adı</Label>
-              <Input 
-                id="name" 
+              <Label htmlFor="name" className="text-xs font-semibold text-ink/60">
+                Hizmet Adı
+              </Label>
+              <Input
+                id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Örn: Saç Kesimi"
-                className="rounded-xl border-border py-6 focus-visible:ring-gold-500"
+                className="h-12 rounded-xl border-ink/10 bg-white focus-visible:ring-brass"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="price" className="font-semibold text-foreground text-sm">Fiyat (₺)</Label>
-              <Input 
-                id="price" 
+              <Label htmlFor="price" className="text-xs font-semibold text-ink/60">
+                Fiyat (₺)
+              </Label>
+              <Input
+                id="price"
                 type="number"
+                step="0.01"
+                min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="Örn: 350"
-                className="rounded-xl border-border py-6 focus-visible:ring-gold-500"
+                className="h-12 rounded-xl border-ink/10 bg-white focus-visible:ring-brass"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="duration" className="font-semibold text-foreground text-sm">Süre (Dakika)</Label>
-              <Input 
-                id="duration" 
+              <Label htmlFor="duration" className="text-xs font-semibold text-ink/60">
+                Süre (Dakika)
+              </Label>
+              <Input
+                id="duration"
                 type="number"
+                min="1"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
                 placeholder="Örn: 45"
-                className="rounded-xl border-border py-6 focus-visible:ring-gold-500"
+                className="h-12 rounded-xl border-ink/10 bg-white focus-visible:ring-brass"
                 required
               />
             </div>
           </div>
-          <div className="flex justify-end space-x-3 pt-4 mt-6">
-            <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl px-6 h-12 font-semibold">
+
+          <div className="mt-6 flex justify-end gap-2 border-t border-ink/10 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={resetForm}
+              className="h-11 rounded-xl px-5 text-xs font-semibold"
+            >
               İptal
             </Button>
-            <Button type="submit" className="bg-gold-500 hover:bg-gold-600 text-white rounded-xl px-8 h-12 font-bold transition-colors">
-              <Save className="w-4 h-4 mr-2" />
+            <Button
+              type="submit"
+              className="h-11 rounded-xl bg-ink px-6 text-xs font-semibold text-cream hover:bg-ink-soft"
+            >
+              <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />
               Kaydet
             </Button>
           </div>
         </form>
       </Modal>
 
-      <Card className="bg-white border border-border/60 shadow-md rounded-2xl overflow-hidden">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center p-12">
-              <Loader2 className="w-8 h-8 animate-spin text-gold-500" />
-            </div>
-          ) : services.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground font-medium">
-              Henüz hiç hizmet eklenmemiş.
-            </div>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {services.map(service => (
-                <div key={service.id} className="flex items-center justify-between p-6 hover:bg-secondary/5 transition-colors">
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">{service.name}</h3>
-                    <div className="flex items-center text-muted-foreground mt-1 text-sm font-medium">
-                      <span className="text-gold-600 font-bold mr-4">₺{service.price}</span>
-                      <span>{service.duration} Dakika</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleEditClick(service)}
-                      className="rounded-lg border-border hover:bg-secondary text-foreground font-medium h-10 px-4"
-                    >
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Düzenle
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm"
-                      onClick={() => handleDeleteClick(service.id)}
-                      className="rounded-lg h-10 px-4 font-medium bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Sil
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={modalState.isOpen}
         onClose={closeModal}
         onConfirm={modalState.onConfirm}
         title={modalState.title}
         description={modalState.description}
         type={modalState.type}
-        confirmText={modalState.cancelText === '' ? 'Tamam' : (modalState as any).confirmText || 'Onayla'}
+        confirmText={modalState.cancelText === '' ? 'Tamam' : modalState.confirmText || 'Onayla'}
         cancelText={modalState.cancelText}
       />
     </div>

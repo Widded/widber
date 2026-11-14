@@ -166,7 +166,7 @@ const BookingWizard = () => {
           total_price: totalPrice,
           total_duration: totalDuration
         }])
-        .select()
+        .select('id')
         .single();
         
       if (appError) throw appError;
