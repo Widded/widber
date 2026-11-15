@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { parse, addMinutes, addDays, isToday } from 'date-fns';
 import { Barber } from '../context/BookingContext';
@@ -6,27 +6,35 @@ import { Barber } from '../context/BookingContext';
 export const useAvailableTimes = (selectedDate: string, selectedBarber: Barber | null, totalDuration: number) => {
   const [bookedTimes, setBookedTimes] = useState<string[]>([]);
   const [fetchingTimes, setFetchingTimes] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
 
   useEffect(() => {
-    if (!selectedDate || !selectedBarber) return;
+    if (!selectedDate || !selectedBarber) {
+      setBookedTimes([]);
+      return;
+    }
     
     const fetchBookedTimes = async () => {
       setFetchingTimes(true);
       try {
-        const { data: appData, error: appError } = await supabase
-          .from('appointments')
-          .select('appointment_time, barber_id, total_duration')
-          .eq('appointment_date', selectedDate)
-          .in('status', ['pending', 'approved']);
-          
-        if (appError) throw appError;
+        const [appointmentsResult, blockedResult] = await Promise.all([
+          supabase
+            .from('appointments')
+            .select('appointment_time, barber_id, total_duration')
+            .eq('appointment_date', selectedDate)
+            .in('status', ['pending', 'approved', 'completed']),
+          supabase
+            .from('barber_blocked_times')
+            .select('blocked_time, barber_id')
+            .eq('blocked_date', selectedDate),
+        ]);
 
-        const { data: blockedData, error: blockedError } = await supabase
-          .from('barber_blocked_times')
-          .select('blocked_time, barber_id')
-          .eq('blocked_date', selectedDate);
+        if (appointmentsResult.error) throw appointmentsResult.error;
+        if (blockedResult.error) throw blockedResult.error;
 
-        if (blockedError) throw blockedError;
+        const appData = appointmentsResult.data;
+        const blockedData = blockedResult.data;
         
         const appointmentsAtDate = appData?.map(app => {
           const t = app.appointment_time;
@@ -96,7 +104,7 @@ export const useAvailableTimes = (selectedDate: string, selectedBarber: Barber |
     };
     
     fetchBookedTimes();
-  }, [selectedDate, selectedBarber, totalDuration]);
+  }, [selectedDate, selectedBarber, totalDuration, refreshKey]);
 
-  return { bookedTimes, fetchingTimes };
+  return { bookedTimes, fetchingTimes, refresh };
 };

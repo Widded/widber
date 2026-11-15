@@ -58,7 +58,7 @@ create table if not exists public.appointments (
   appointment_date date not null,
   appointment_time time not null,
   barber_id uuid references public.barbers(id) on delete set null,
-  status text not null default 'pending'
+  status text not null default 'approved'
     check (status in ('pending', 'approved', 'completed', 'cancelled', 'rejected')),
   total_price numeric not null default 0 check (total_price >= 0),
   total_duration integer not null default 0 check (total_duration >= 0),

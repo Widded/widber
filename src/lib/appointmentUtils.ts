@@ -22,12 +22,6 @@ export const getServiceNames = (appointment: AdminAppointment) => {
 export const getStatusMeta = (status: string) => {
   switch (status) {
     case 'pending':
-      return {
-        label: 'Bekliyor',
-        badge: 'bg-amber-50 text-amber-700 border-amber-200',
-        dot: 'bg-amber-500',
-        rail: 'border-l-amber-400',
-      };
     case 'approved':
       return {
         label: 'Onaylandı',

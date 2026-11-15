@@ -132,28 +132,28 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cream px-4 py-10">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-10">
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-32 top-0 h-80 w-80 rounded-full bg-brass/10 blur-3xl" />
+        <div className="absolute -left-32 top-0 h-80 w-80 rounded-full bg-blue-50 blur-3xl" />
         <div className="absolute -right-32 bottom-0 h-80 w-80 rounded-full bg-sand/50 blur-3xl" />
       </div>
 
-      <Card className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-ink/10 bg-cream-soft shadow-[0_30px_80px_-30px_rgba(23,19,16,0.35)]">
-        <CardHeader className="space-y-2 border-b border-ink/10 bg-white/40 px-8 pb-6 pt-8 text-center">
+      <Card className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-50 shadow-sm">
+        <CardHeader className="space-y-2 border-b border-slate-200 bg-white/40 px-8 pb-6 pt-8 text-center">
           <Link to="/" className="mx-auto inline-flex items-baseline gap-1" aria-label="WidBer ana sayfa">
-            <span className="font-display text-2xl font-semibold tracking-tight text-ink">
+            <span className="font-bold text-2xl font-semibold tracking-tight text-slate-900">
               WidBer
             </span>
-            <span className="mb-1 h-1.5 w-1.5 rounded-full bg-brass" aria-hidden="true" />
+            <span className="mb-1 h-1.5 w-1.5 rounded-full bg-blue-600" aria-hidden="true" />
           </Link>
 
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brass-dark">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600">
             {loginMode === 'admin' ? 'Yönetim' : 'Personel'}
           </p>
-          <CardTitle className="font-display text-3xl font-normal text-ink">
+          <CardTitle className="font-bold text-3xl font-normal text-slate-900">
             {loginMode === 'admin' ? 'Yönetici Girişi' : 'Personel Girişi'}
           </CardTitle>
-          <CardDescription className="text-sm text-ink/50">
+          <CardDescription className="text-sm text-slate-900/50">
             {loginMode === 'admin'
               ? 'Yönetim paneline erişmek için giriş yapın.'
               : 'Kendi randevularınızı görmek için PIN girin.'}
@@ -174,16 +174,16 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
           {loginMode === 'admin' ? (
             <form onSubmit={handleAdminLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-semibold text-ink/60">
+                <Label htmlFor="email" className="text-xs font-semibold text-slate-900/60">
                   E-posta
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" aria-hidden="true" />
+                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="admin@ornek.com"
-                    className="h-12 rounded-xl border-ink/10 bg-white pl-11 text-[15px] focus-visible:ring-brass"
+                    className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-[15px] focus-visible:ring-blue-500"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
@@ -193,15 +193,15 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs font-semibold text-ink/60">
+                <Label htmlFor="password" className="text-xs font-semibold text-slate-900/60">
                   Şifre
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" aria-hidden="true" />
+                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                   <Input
                     id="password"
                     type="password"
-                    className="h-12 rounded-xl border-ink/10 bg-white pl-11 text-[15px] focus-visible:ring-brass"
+                    className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-[15px] focus-visible:ring-blue-500"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
@@ -212,7 +212,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
 
               <Button
                 type="submit"
-                className="h-14 w-full rounded-xl bg-ink text-sm font-semibold text-cream hover:bg-ink-soft"
+                className="h-14 w-full rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
                 disabled={loading}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Giriş Yap'}
@@ -222,7 +222,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
             <form onSubmit={handleStaffLogin} className="space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="barber" className="text-xs font-semibold text-ink/60">
+                  <Label htmlFor="barber" className="text-xs font-semibold text-slate-900/60">
                     İsminizi Seçin
                   </Label>
                   <button
@@ -230,7 +230,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     onClick={() => void fetchBarbers()}
                     disabled={barbersLoading}
                     aria-label="Personel listesini yenile"
-                    className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-ink/40 transition-colors hover:text-ink disabled:opacity-50"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-900/40 transition-colors hover:text-slate-900 disabled:opacity-50"
                   >
                     <RefreshCw
                       className={cn('h-3 w-3', barbersLoading && 'animate-spin')}
@@ -246,7 +246,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     value={selectedBarber}
                     onChange={(e) => setSelectedBarber(e.target.value)}
                     disabled={barbersLoading}
-                    className="w-full appearance-none rounded-xl border border-ink/10 bg-white px-4 py-3.5 pr-10 text-[15px] font-medium text-ink outline-none transition-colors focus:border-brass focus:ring-2 focus:ring-brass/20 disabled:opacity-60"
+                    className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3.5 pr-10 text-[15px] font-medium text-slate-900 outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60"
                     required
                   >
                     <option value="" disabled>
@@ -259,24 +259,24 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     ))}
                   </select>
                   <ChevronDown
-                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35"
+                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                     aria-hidden="true"
                   />
                 </div>
 
                 {!barbersLoading && barbers.length === 0 && (
-                  <p className="text-xs leading-relaxed text-ink/40">
+                  <p className="text-xs leading-relaxed text-slate-900/40">
                     Henüz personel eklenmemiş. Yönetici panelinden personel ekleyin.
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pin" className="text-xs font-semibold text-ink/60">
+                <Label htmlFor="pin" className="text-xs font-semibold text-slate-900/60">
                   6 Haneli PIN Kodu
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" aria-hidden="true" />
+                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                   <Input
                     id="pin"
                     type={showPin ? 'text' : 'password'}
@@ -284,7 +284,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     pattern="[0-9]*"
                     maxLength={6}
                     placeholder="******"
-                    className="h-14 rounded-xl border-ink/10 bg-white pl-11 pr-12 text-center font-mono text-2xl tracking-[0.4em] focus-visible:ring-brass"
+                    className="h-14 rounded-xl border-slate-200 bg-white pl-11 pr-12 text-center font-mono text-2xl tracking-[0.4em] focus-visible:ring-blue-500"
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                     autoComplete="off"
@@ -294,7 +294,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     type="button"
                     onClick={() => setShowPin((visible) => !visible)}
                     aria-label={showPin ? 'PIN kodunu gizle' : 'PIN kodunu göster'}
-                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-ink/40 transition-colors hover:bg-ink/5 hover:text-ink"
+                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-900/40 transition-colors hover:bg-slate-100 hover:text-slate-900"
                   >
                     {showPin ? (
                       <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -303,14 +303,14 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     )}
                   </button>
                 </div>
-                <p className="text-[11px] text-ink/40">
+                <p className="text-[11px] text-slate-900/40">
                   PIN'inizi bilmiyorsanız yöneticinize başvurun.
                 </p>
               </div>
 
               <Button
                 type="submit"
-                className="h-14 w-full rounded-xl bg-ink text-sm font-semibold text-cream hover:bg-ink-soft"
+                className="h-14 w-full rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700"
                 disabled={loading || barbersLoading || !selectedBarber || pin.length !== 6}
               >
                 {loading ? (
@@ -322,10 +322,10 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
             </form>
           )}
 
-          <div className="mt-7 border-t border-ink/10 pt-5 text-center">
+          <div className="mt-7 border-t border-slate-200 pt-5 text-center">
             <Link
               to="/"
-              className="text-xs font-semibold text-ink/45 transition-colors hover:text-ink"
+              className="text-xs font-semibold text-slate-500 transition-colors hover:text-slate-900"
             >
               <span className="mr-1">&larr;</span> Müşteri Ekranına Dön
             </Link>

@@ -1,15 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Label } from '../../components/ui/label';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  CalendarClock,
+  CalendarDays,
+  Check,
+  Clock3,
+  Loader2,
+  Lock,
+  Save,
+  Settings2,
+  Unlock,
+  Users,
+} from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
-import { Loader2, Calendar as CalendarIcon, Clock, Lock, Unlock, Save, Settings2, CalendarClock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
-import { addDays, format, isSameDay, parse, startOfDay, getDay } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import {
+  EmptyPanel,
+  PageHeader,
+  Panel,
+  primaryButton,
+  secondaryButton,
+} from '../../components/admin/editorial';
+import { getBookingDates, getFirstBookingDate } from '../../lib/bookingDates';
 
 interface BlockedTime {
   id: string;
@@ -18,60 +34,70 @@ interface BlockedTime {
   blocked_time: string;
 }
 
+const getInitials = (name?: string) =>
+  (name || 'P')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'P';
+
+const groupSlots = (slots: string[]) => ({
+  morning: slots.filter((time) => Number(time.split(':')[0]) < 12),
+  afternoon: slots.filter((time) => {
+    const hour = Number(time.split(':')[0]);
+    return hour >= 12 && hour < 17;
+  }),
+  evening: slots.filter((time) => Number(time.split(':')[0]) >= 17),
+});
+
 const AvailabilityManagement = () => {
   const { staffBarber, isAdmin } = useAuth();
   const { barbers, loading: initialLoading } = useSupabaseData();
-  
+
   const [activeTab, setActiveTab] = useState<'permanent' | 'exception'>('permanent');
   const [loading, setLoading] = useState(false);
-  
-  // States for 'exception' tab
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [localBlockedTimes, setLocalBlockedTimes] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  
-  // States for 'permanent' tab
+  const [selectedDate, setSelectedDate] = useState<Date>(() => getFirstBookingDate());
   const [permanentHours, setPermanentHours] = useState<string[]>([]);
   const [slotInterval, setSlotInterval] = useState<number>(30);
-  
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
-  const [modalConfig, setModalConfig] = useState<{isOpen: boolean, type: 'success'|'danger'|'warning', title: string, desc: string}>({
-    isOpen: false, type: 'success', title: '', desc: ''
-  });
-  
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
-  const activeBarberId = isAdmin ? selectedBarberId : staffBarber?.id;
-  const activeBarber = barbers.find(b => b.id === activeBarberId);
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'danger' | 'warning';
+    title: string;
+    desc: string;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    desc: '',
+  });
 
-  // Oluşturulabilecek tüm olası saatler
-  const allTimeSlots = React.useMemo(() => {
+  const activeBarberId = isAdmin ? selectedBarberId : staffBarber?.id;
+  const activeBarber = barbers.find((barber) => barber.id === activeBarberId);
+
+  const allTimeSlots = useMemo(() => {
     const slots = [];
-    let currentMinutes = 8 * 60; // 08:00
-    const endMinutes = 23 * 60 + 59; // 23:59
-    while (currentMinutes <= endMinutes) {
+    let currentMinutes = 8 * 60;
+
+    while (currentMinutes <= 23 * 60 + 59) {
       const h = Math.floor(currentMinutes / 60);
       const m = currentMinutes % 60;
-      slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+      slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
       currentMinutes += slotInterval;
     }
+
     return slots;
   }, [slotInterval]);
 
-  const availableDates = React.useMemo(() => {
-    const dates = [];
-    let currentDate = startOfDay(new Date());
-    let daysAdded = 0;
-    while (daysAdded < 18) {
-      if (getDay(currentDate) !== 0) {
-        dates.push(currentDate);
-        daysAdded++;
-      }
-      currentDate = addDays(currentDate, 1);
-    }
-    return dates;
-  }, []);
+  const permanentGroups = groupSlots(allTimeSlots);
+  const exceptionGroups = groupSlots(permanentHours);
+
+  const availableDates = useMemo(() => getBookingDates(), []);
 
   useEffect(() => {
     if (isAdmin && barbers.length > 0 && !selectedBarberId) {
@@ -80,25 +106,26 @@ const AvailabilityManagement = () => {
   }, [isAdmin, barbers, selectedBarberId]);
 
   useEffect(() => {
-    fetchPermanentHours();
+    void fetchPermanentHours();
   }, [activeBarberId]);
 
   useEffect(() => {
     if (activeTab === 'exception') {
-      fetchBlockedTimes();
+      void fetchBlockedTimes();
     }
   }, [activeBarberId, selectedDate, activeTab]);
 
   const fetchPermanentHours = async () => {
     if (!activeBarberId) return;
     setLoading(true);
+
     try {
       const { data, error } = await supabase
         .from('barbers')
         .select('working_hours')
         .eq('id', activeBarberId)
         .single();
-      
+
       if (error) throw error;
       setPermanentHours(data.working_hours || []);
       setHasChanges(false);
@@ -112,6 +139,7 @@ const AvailabilityManagement = () => {
   const fetchBlockedTimes = async () => {
     if (!activeBarberId) return;
     setLoading(true);
+
     try {
       const { data, error } = await supabase
         .from('barber_blocked_times')
@@ -121,7 +149,7 @@ const AvailabilityManagement = () => {
 
       if (error) throw error;
       setBlockedTimes(data || []);
-      setLocalBlockedTimes((data || []).map(b => b.blocked_time));
+      setLocalBlockedTimes((data || []).map((item) => item.blocked_time));
       setHasChanges(false);
     } catch (err) {
       console.error('Kapalı saatler çekilirken hata:', err);
@@ -131,16 +159,16 @@ const AvailabilityManagement = () => {
   };
 
   const togglePermanentSlot = (time: string) => {
-    setPermanentHours(prev => {
-      if (prev.includes(time)) return prev.filter(t => t !== time);
+    setPermanentHours((prev) => {
+      if (prev.includes(time)) return prev.filter((value) => value !== time);
       return [...prev, time].sort();
     });
     setHasChanges(true);
   };
 
   const toggleExceptionSlot = (time: string) => {
-    setLocalBlockedTimes(prev => {
-      if (prev.includes(time)) return prev.filter(t => t !== time);
+    setLocalBlockedTimes((prev) => {
+      if (prev.includes(time)) return prev.filter((value) => value !== time);
       return [...prev, time];
     });
     setHasChanges(true);
@@ -149,16 +177,14 @@ const AvailabilityManagement = () => {
   const savePermanentHours = async () => {
     if (!activeBarberId) return;
     setIsSaving(true);
+
     try {
-      // Personel ortak Supabase hesabını kullandığı için doğrudan UPDATE yerine
-      // yalnızca working_hours alanını güncelleyen RPC kullanıyoruz.
       const { error } = await supabase.rpc('update_barber_working_hours', {
         p_barber_id: activeBarberId,
         p_hours: permanentHours,
       });
 
       if (error) {
-        // RPC henüz kurulmadıysa patron doğrudan UPDATE ile devam edebilsin.
         if (!isAdmin) throw error;
 
         const { error: directError } = await supabase
@@ -168,12 +194,22 @@ const AvailabilityManagement = () => {
 
         if (directError) throw directError;
       }
-      
+
       setHasChanges(false);
-      setModalConfig({ isOpen: true, type: 'success', title: 'Başarılı', desc: 'Kalıcı mesai saatleriniz güncellendi.' });
+      setModalConfig({
+        isOpen: true,
+        type: 'success',
+        title: 'Başarılı',
+        desc: 'Kalıcı mesai saatleriniz güncellendi.',
+      });
     } catch (err) {
       console.error(err);
-      setModalConfig({ isOpen: true, type: 'danger', title: 'Hata', desc: 'İşlem sırasında bir hata oluştu.' });
+      setModalConfig({
+        isOpen: true,
+        type: 'danger',
+        title: 'Hata',
+        desc: 'İşlem sırasında bir hata oluştu.',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -184,329 +220,588 @@ const AvailabilityManagement = () => {
     setIsSaving(true);
 
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const originalTimes = blockedTimes.map(b => b.blocked_time);
-    
-    const toAdd = localBlockedTimes.filter(t => !originalTimes.includes(t));
-    const toDeleteIds = blockedTimes.filter(b => !localBlockedTimes.includes(b.blocked_time)).map(b => b.id);
+    const originalTimes = blockedTimes.map((item) => item.blocked_time);
+    const toAdd = localBlockedTimes.filter((time) => !originalTimes.includes(time));
+    const toDeleteIds = blockedTimes
+      .filter((item) => !localBlockedTimes.includes(item.blocked_time))
+      .map((item) => item.id);
 
     try {
       if (toDeleteIds.length > 0) {
-        const { error } = await supabase.from('barber_blocked_times').delete().in('id', toDeleteIds);
+        const { error } = await supabase
+          .from('barber_blocked_times')
+          .delete()
+          .in('id', toDeleteIds);
         if (error) throw error;
       }
+
       if (toAdd.length > 0) {
         const { error } = await supabase.from('barber_blocked_times').insert(
-          toAdd.map(time => ({ barber_id: activeBarberId, blocked_date: dateStr, blocked_time: time }))
+          toAdd.map((time) => ({
+            barber_id: activeBarberId,
+            blocked_date: dateStr,
+            blocked_time: time,
+          }))
         );
         if (error) throw error;
       }
+
       await fetchBlockedTimes();
-      setModalConfig({ isOpen: true, type: 'success', title: 'Başarılı', desc: 'İstisnai mola saatleri güncellendi.' });
+      setModalConfig({
+        isOpen: true,
+        type: 'success',
+        title: 'Başarılı',
+        desc: 'İstisnai mola saatleri güncellendi.',
+      });
     } catch (err) {
       console.error(err);
-      setModalConfig({ isOpen: true, type: 'danger', title: 'Hata', desc: 'İşlem sırasında bir hata oluştu.' });
+      setModalConfig({
+        isOpen: true,
+        type: 'danger',
+        title: 'Hata',
+        desc: 'İşlem sırasında bir hata oluştu.',
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
+  const renderSlotGroup = (
+    label: string,
+    slots: string[],
+    selectedSlots: string[],
+    onToggle: (time: string) => void,
+    variant: 'permanent' | 'exception'
+  ) => {
+    if (slots.length === 0) return null;
+
+    return (
+      <div>
+        <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#2563EB]/80">
+          {label}
+        </p>
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+          {slots.map((time) => {
+            const selected = selectedSlots.includes(time);
+
+            return (
+              <button
+                key={time}
+                type="button"
+                onClick={() => onToggle(time)}
+                aria-pressed={selected}
+                className={cn(
+                  'flex h-9 items-center justify-center gap-1.5 rounded-lg border text-[11px] font-semibold transition-all',
+                  selected
+                    ? variant === 'permanent'
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                      : 'border-red-200 bg-red-50 text-red-600'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50'
+                )}
+              >
+                {selected && variant === 'permanent' && (
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                )}
+                {time}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (initialLoading) {
-    return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-brass-dark" /></div>;
+    return (
+      <div className="relative">
+        <div className="space-y-4">
+          <div className="h-20 w-72 animate-pulse rounded-2xl bg-[#FFFFFF]/70" />
+          <div className="h-[420px] animate-pulse rounded-xl bg-[#FFFFFF]/70" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6 pb-24 md:pb-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-normal tracking-tight text-ink md:text-4xl">Müsaitlik Yönetimi</h1>
-          <p className="mt-1 text-sm text-ink/45">Kendi sabit mesai saatlerinizi veya istisnai gün izinlerinizi ayarlayın.</p>
-        </div>
-      </div>
+    <div className="relative pb-16 md:pb-0">
+      <div className="relative space-y-5">
+        <PageHeader
+          eyebrow="Ayarlar"
+          title="Müsaitlik"
+          subtitle="Sabit mesai saatlerini ve özel gün izinlerini tek ekrandan yönet."
+          actions={
+            <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 text-[10px] font-semibold text-[#475569]">
+              <Clock3 className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
+              {permanentHours.length} saat tanımlı
+            </span>
+          }
+        />
 
-      {isAdmin && (
-        <Card className="bg-white border border-border/60 shadow-sm rounded-xl overflow-hidden">
-          <CardContent className="p-4">
-            <Label className="mb-2 block text-sm font-semibold text-muted-foreground">İşlem Yapılacak Personel Seçin (Sadece Patrona Özel)</Label>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {barbers.map(barber => (
-                <Button
-                  key={barber.id}
-                  variant={selectedBarberId === barber.id ? 'default' : 'outline'}
-                  onClick={() => { setSelectedBarberId(barber.id); setHasChanges(false); }}
-                  className={cn("rounded-lg", selectedBarberId === barber.id ? "bg-ink hover:bg-ink-soft text-cream" : "")}
-                >
-                  {barber.name}
-                </Button>
-              ))}
+        {isAdmin && (
+          <section className="rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] p-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-2 px-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">
+                <Users className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
+                Personel
+              </span>
+              <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
+                {barbers.map((barber) => (
+                  <button
+                    key={barber.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBarberId(barber.id);
+                      setHasChanges(false);
+                    }}
+                    className={cn(
+                      'inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-4 text-xs font-semibold transition-colors',
+                      selectedBarberId === barber.id
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex h-5 w-5 items-center justify-center rounded-full text-[8px]',
+                        selectedBarberId === barber.id
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 text-slate-500'
+                      )}
+                    >
+                      {getInitials(barber.name)}
+                    </span>
+                    {barber.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </section>
+        )}
 
-      {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-secondary/30 rounded-xl w-fit">
-        <button
-          onClick={() => { setActiveTab('permanent'); setHasChanges(false); }}
-          className={cn("px-4 py-2 rounded-lg text-sm font-semibold flex items-center transition-all", activeTab === 'permanent' ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
-        >
-          <Settings2 className="w-4 h-4 mr-2" /> Kalıcı Saatler
-        </button>
-        <button
-          onClick={() => { setActiveTab('exception'); setHasChanges(false); }}
-          className={cn("px-4 py-2 rounded-lg text-sm font-semibold flex items-center transition-all", activeTab === 'exception' ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
-        >
-          <CalendarClock className="w-4 h-4 mr-2" /> Özel İzin/Mola
-        </button>
-      </div>
+        <div className="grid w-full grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 sm:inline-flex sm:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('permanent');
+              setHasChanges(false);
+            }}
+            className={cn(
+              'inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors',
+              activeTab === 'permanent'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900'
+            )}
+          >
+            <Settings2 className="h-4 w-4" aria-hidden="true" />
+            Kalıcı saatler
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('exception');
+              setHasChanges(false);
+            }}
+            className={cn(
+              'inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors',
+              activeTab === 'exception'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900'
+            )}
+          >
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            Özel izin / mola
+          </button>
+        </div>
 
-      {activeTab === 'permanent' && (
-        <Card className="border border-border/60 shadow-sm rounded-2xl">
-          <CardHeader className="bg-secondary/20 border-b border-border/50 pb-4">
-            <CardTitle className="text-lg flex items-center justify-between">
-              <div className="flex items-center">
-                <Clock className="w-5 h-5 mr-2 text-brass-dark" />
-                Sabit Mesai Saatlerim
-              </div>
-              <div className="flex items-center gap-4">
-                <select
-                  value={slotInterval}
-                  onChange={(e) => setSlotInterval(Number(e.target.value))}
-                  className="px-3 py-1 text-sm rounded-lg border border-border/50 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-brass/50"
-                >
-                  <option value={15}>15 Dakika Aralık</option>
-                  <option value={20}>20 Dakika Aralık</option>
-                  <option value={30}>30 Dakika Aralık</option>
-                  <option value={45}>45 Dakika Aralık</option>
-                  <option value={60}>60 Dakika Aralık</option>
-                </select>
-                <span className="text-sm font-medium text-muted-foreground bg-white px-3 py-1 rounded-full border">
-                  {activeBarber?.name || 'Seçim Bekleniyor'}
+        {activeTab === 'permanent' && (
+          <div className="grid gap-4 xl:grid-cols-12">
+            <Panel
+              title="Haftalık mesai"
+              subtitle="Tüm günler için geçerli varsayılan çalışma saatleri"
+              icon={Clock3}
+              action={
+                <span className="rounded-full bg-[#EFF6FF] px-2.5 py-1 text-[9px] font-bold text-[#2563EB]">
+                  {permanentHours.length} seçili
                 </span>
+              }
+              className="xl:col-span-8"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-[#64748B]">Aralık</span>
+                  <select
+                    value={slotInterval}
+                    onChange={(event) => setSlotInterval(Number(event.target.value))}
+                    className="h-9 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] px-3 text-xs font-semibold text-[#475569] outline-none focus:border-[#2563EB]"
+                  >
+                    <option value={15}>15 dakika</option>
+                    <option value={20}>20 dakika</option>
+                    <option value={30}>30 dakika</option>
+                    <option value={45}>45 dakika</option>
+                    <option value={60}>60 dakika</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPermanentHours(allTimeSlots);
+                      setHasChanges(true);
+                    }}
+                    className={secondaryButton}
+                  >
+                    Tümünü seç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPermanentHours([]);
+                      setHasChanges(true);
+                    }}
+                    className={secondaryButton}
+                  >
+                    Temizle
+                  </button>
+                </div>
               </div>
-            </CardTitle>
-            <CardDescription className="pt-2">Bu saatler sistemdeki TÜM GÜNLERİNİZ için geçerli olan varsayılan çalışma programınızdır. Aktif olarak çalışmak istediğiniz (yeşil) saatleri seçin.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            {loading ? (
-              <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-brass-dark" /></div>
-            ) : !activeBarberId ? (
-              <div className="text-center py-12 text-muted-foreground">Lütfen personel seçimi yapın.</div>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {permanentHours.length} saat seçili
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
+
+              {loading ? (
+                <div className="flex justify-center py-14">
+                  <Loader2 className="h-7 w-7 animate-spin text-[#2563EB]" />
+                </div>
+              ) : !activeBarberId ? (
+                <EmptyPanel
+                  icon={Users}
+                  title="Personel seçimi yok"
+                  text="Mesai saatlerini düzenlemek için önce bir personel seçin."
+                />
+              ) : (
+                <div className="mt-5 space-y-6">
+                  {renderSlotGroup(
+                    'Sabah',
+                    permanentGroups.morning,
+                    permanentHours,
+                    togglePermanentSlot,
+                    'permanent'
+                  )}
+                  {renderSlotGroup(
+                    'Öğleden sonra',
+                    permanentGroups.afternoon,
+                    permanentHours,
+                    togglePermanentSlot,
+                    'permanent'
+                  )}
+                  {renderSlotGroup(
+                    'Akşam',
+                    permanentGroups.evening,
+                    permanentHours,
+                    togglePermanentSlot,
+                    'permanent'
+                  )}
+
+                  <div className="flex justify-end border-t border-[#F1F5F9] pt-4">
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setPermanentHours(allTimeSlots);
-                        setHasChanges(true);
-                      }}
-                      className="h-8 rounded-lg text-xs"
+                      onClick={() => void savePermanentHours()}
+                      disabled={!hasChanges || isSaving}
+                      className={primaryButton}
                     >
-                      Tümünü Seç
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setPermanentHours([]);
-                        setHasChanges(true);
-                      }}
-                      className="h-8 rounded-lg text-xs"
-                    >
-                      Temizle
-                    </Button>
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Save className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      Mesai programını kaydet
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Panel>
+
+            <aside className="space-y-4 xl:col-span-4">
+              <Panel title="Özet" subtitle="Seçili personel" icon={Users}>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#F8FAFC] font-bold text-lg text-[#2563EB]">
+                    {getInitials(activeBarber?.name)}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-[#0F172A]">
+                      {activeBarber?.name || 'Seçim bekleniyor'}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-[#64748B]">
+                      {permanentHours.length} aktif saat · {slotInterval} dk aralık
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2">
-                  {allTimeSlots.map((time) => {
-                    const isWorking = permanentHours.includes(time);
-                    return (
-                      <button
-                        key={time}
-                        onClick={() => togglePermanentSlot(time)}
-                        className={cn(
-                          "relative flex flex-col items-center justify-center p-2 rounded-lg border transition-all font-semibold text-sm group overflow-hidden",
-                          isWorking 
-                            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100" 
-                            : "bg-white border-border text-muted-foreground opacity-60 hover:opacity-100"
-                        )}
-                      >
-                        {time}
-                      </button>
-                    );
-                  })}
+                <div className="mt-4 rounded-2xl bg-[#F8FAFC] p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#94A3B8]">
+                    Çalışma penceresi
+                  </p>
+                  <p className="mt-1 font-bold text-2xl leading-none text-[#0F172A]">
+                    {permanentHours.length > 0
+                      ? `${permanentHours[0]} – ${
+                          permanentHours[permanentHours.length - 1]
+                        }`
+                      : 'Tanımsız'}
+                  </p>
                 </div>
-                <div className="flex justify-end pt-4 border-t border-border/50">
-                  <Button 
-                    onClick={savePermanentHours} 
-                    disabled={!hasChanges || isSaving}
-                    className="bg-ink hover:bg-ink-soft text-cream font-semibold rounded-xl px-8"
-                  >
-                    {isSaving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
-                    Mesai Programını Kaydet
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      {activeTab === 'exception' && (
-        <div className="grid lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-1 border border-border/60 shadow-sm rounded-2xl h-fit">
-            <CardHeader className="bg-secondary/20 border-b border-border/50 pb-4">
-              <CardTitle className="text-lg flex items-center">
-                <CalendarIcon className="w-5 h-5 mr-2 text-brass-dark" />
-                Tarih Seçin
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2 overflow-y-auto max-h-[400px] pr-2">
-                {availableDates.map((day, idx) => {
-                  const isSelected = isSameDay(day, selectedDate);
+                <p className="mt-4 text-[10px] leading-relaxed text-[#64748B]">
+                  Burada seçtiğin saatler tüm günler için geçerlidir. Özel izin veya
+                  mola için “Özel izin / mola” sekmesini kullan.
+                </p>
+              </Panel>
+
+              <Panel title="Nasıl çalışır?" icon={CalendarClock} className="hidden lg:block">
+                <ol className="space-y-3 text-[10px] leading-relaxed text-[#64748B]">
+                  <li className="flex gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#EFF6FF] text-[9px] font-bold text-[#2563EB]">
+                      1
+                    </span>
+                    Çalışmak istediğin saatleri seç.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#EFF6FF] text-[9px] font-bold text-[#2563EB]">
+                      2
+                    </span>
+                    Kaydet butonuyla programa işle.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#EFF6FF] text-[9px] font-bold text-[#2563EB]">
+                      3
+                    </span>
+                    Belirli bir gün için mola vermek üzere diğer sekmeye geç.
+                  </li>
+                </ol>
+              </Panel>
+            </aside>
+          </div>
+        )}
+
+        {activeTab === 'exception' && (
+          <div className="space-y-4">
+            <Panel
+              title="Tarih seç"
+              subtitle="Bugün + 7 gün · Pazar kapalı"
+              icon={CalendarDays}
+            >
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                {availableDates.map((day) => {
+                  const selected = isSameDay(day, selectedDate);
+                  const today = isSameDay(day, new Date());
+
                   return (
                     <button
-                      key={idx}
-                      onClick={() => { setSelectedDate(day); setHasChanges(false); }}
+                      key={format(day, 'yyyy-MM-dd')}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDate(day);
+                        setHasChanges(false);
+                      }}
                       className={cn(
-                        "flex flex-col items-center justify-center p-2 rounded-xl border transition-all cursor-pointer",
-                        isSelected ? "border-ink bg-ink text-cream shadow-md" : "border-border bg-white hover:border-brass/40 hover:bg-secondary/20"
+                        'flex min-w-0 flex-col items-center rounded-xl border px-2 py-2.5 transition-colors',
+                        selected
+                          ? 'border-blue-600 bg-blue-600 text-white'
+                          : today
+                            ? 'border-blue-200 bg-blue-50 text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50'
                       )}
                     >
-                      <span className="text-[10px] font-semibold uppercase opacity-80 mb-1">{format(day, 'EEE', { locale: tr })}</span>
-                      <span className="text-lg font-bold">{format(day, 'd')}</span>
+                      <span
+                        className={cn(
+                          'text-[8px] font-bold uppercase tracking-[0.1em]',
+                          selected ? 'text-blue-100' : 'text-slate-400'
+                        )}
+                      >
+                        {format(day, 'EEE', { locale: tr })}
+                      </span>
+                      <span
+                        className={cn(
+                          'mt-1 text-2xl font-bold leading-none',
+                          selected ? 'text-white' : 'text-slate-900'
+                        )}
+                      >
+                        {format(day, 'd')}
+                      </span>
+                      <span
+                        className={cn(
+                          'mt-0.5 text-[8px] font-semibold uppercase',
+                          selected ? 'text-blue-100' : 'text-slate-400'
+                        )}
+                      >
+                        {format(day, 'MMM', { locale: tr })}
+                      </span>
                     </button>
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
+            </Panel>
 
-          <Card className="lg:col-span-2 border border-border/60 shadow-sm rounded-2xl">
-            <CardHeader className="bg-secondary/20 border-b border-border/50 pb-4">
-              <CardTitle className="text-lg flex items-center justify-between">
-                <div className="flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-brass-dark" />
-                  {format(selectedDate, 'd MMMM yyyy, EEEE', { locale: tr })}
+            <div className="grid gap-4 xl:grid-cols-12">
+              <Panel
+                title={format(selectedDate, 'd MMMM yyyy, EEEE', { locale: tr })}
+                subtitle="Kapalı saatleri kırmızı olarak işaretle"
+                icon={Clock3}
+                className="xl:col-span-8"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[10px] text-[#64748B]">
+                    {localBlockedTimes.length} saat kapalı
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalBlockedTimes([]);
+                        setHasChanges(true);
+                      }}
+                      className={secondaryButton}
+                    >
+                      <Unlock className="h-4 w-4" aria-hidden="true" />
+                      Tümünü aç
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalBlockedTimes([...permanentHours]);
+                        setHasChanges(true);
+                      }}
+                      className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#FEE2E2] bg-[#FEF2F2] px-4 text-xs font-semibold text-[#DC2626] transition-colors hover:bg-[#FBE4DC]"
+                    >
+                      <Lock className="h-4 w-4" aria-hidden="true" />
+                      Tüm günü kapat
+                    </button>
+                  </div>
                 </div>
-              </CardTitle>
-              <CardDescription className="pt-2">Bu tarihte istisnai olarak kapatmak istediğiniz (Örn: Hastane, mola) saatleri kırmızı yapın. <br/>Not: Sadece kalıcı mesainize dahil olan saatler listelenir.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              {loading ? (
-                <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-brass-dark" /></div>
-              ) : !activeBarberId ? (
-                <div className="text-center py-12 text-muted-foreground">Lütfen personel seçimi yapın.</div>
-              ) : permanentHours.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">Önce "Kalıcı Saatler" sekmesinden mesai saatlerinizi belirleyin.</div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center pb-2 border-b border-border/30">
-                    <span className="text-sm font-medium text-muted-foreground">Hızlı İşlemler:</span>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setLocalBlockedTimes([]);
-                          setHasChanges(true);
-                        }}
-                        className="text-xs h-8"
+
+                {loading ? (
+                  <div className="flex justify-center py-14">
+                    <Loader2 className="h-7 w-7 animate-spin text-[#2563EB]" />
+                  </div>
+                ) : permanentHours.length === 0 ? (
+                  <EmptyPanel
+                    icon={Clock3}
+                    title="Önce mesai saatleri gerekli"
+                    text="Özel izin tanımlamak için önce Kalıcı saatler sekmesinden çalışma saatlerini belirle."
+                  />
+                ) : (
+                  <div className="mt-5 space-y-6">
+                    {renderSlotGroup(
+                      'Sabah',
+                      exceptionGroups.morning,
+                      localBlockedTimes,
+                      toggleExceptionSlot,
+                      'exception'
+                    )}
+                    {renderSlotGroup(
+                      'Öğleden sonra',
+                      exceptionGroups.afternoon,
+                      localBlockedTimes,
+                      toggleExceptionSlot,
+                      'exception'
+                    )}
+                    {renderSlotGroup(
+                      'Akşam',
+                      exceptionGroups.evening,
+                      localBlockedTimes,
+                      toggleExceptionSlot,
+                      'exception'
+                    )}
+
+                    <div className="flex justify-end border-t border-[#F1F5F9] pt-4">
+                      <button
+                        type="button"
+                        onClick={() => void saveExceptionHours()}
+                        disabled={!hasChanges || isSaving}
+                        className={primaryButton}
                       >
-                        Tümünü Aç
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          setLocalBlockedTimes([...permanentHours]);
-                          setHasChanges(true);
-                        }}
-                        className="text-xs h-8 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border border-red-200"
-                      >
-                        Tüm Günü Kapat
-                      </Button>
+                        {isSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Save className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        Mola / izinleri kaydet
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                    {/* SADECE o personelin kalıcı çalışma saatlerini göster (Çünkü o gün sadece onlarda çalışacak) */}
-                    {permanentHours.map((time) => {
-                      const isBlocked = localBlockedTimes.includes(time);
-                      return (
-                        <button
-                          key={time}
-                          onClick={() => toggleExceptionSlot(time)}
-                          className={cn(
-                            "relative flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all font-bold group overflow-hidden",
-                            isBlocked 
-                              ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100" 
-                              : "bg-white border-border text-foreground hover:border-brass hover:shadow-sm"
-                          )}
-                        >
-                          {time}
-                          {isBlocked ? (
-                            <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Unlock className="w-4 h-4 text-red-600" />
-                            </div>
-                          ) : (
-                            <div className="absolute inset-0 bg-brass/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Lock className="w-4 h-4 text-brass-dark" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                )}
+              </Panel>
 
-                  <div className="flex justify-end pt-4 border-t border-border/50">
-                    <Button 
-                      onClick={saveExceptionHours} 
-                      disabled={!hasChanges || isSaving}
-                      className="bg-ink hover:bg-ink-soft text-cream font-semibold rounded-xl px-8"
-                    >
-                      {isSaving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Save className="w-5 h-5 mr-2" />}
-                      Mola/İzinleri Kaydet
-                    </Button>
+              <aside className="space-y-4 xl:col-span-4">
+                <Panel title="Günün durumu" subtitle={format(selectedDate, 'd MMMM', { locale: tr })} icon={CalendarDays}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-[#ECFDF5] p-3">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#059669]/70">
+                        Açık
+                      </p>
+                      <p className="mt-1 font-bold text-2xl leading-none text-[#059669]">
+                        {Math.max(0, permanentHours.length - localBlockedTimes.length)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-[#FEF2F2] p-3">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#DC2626]/70">
+                        Kapalı
+                      </p>
+                      <p className="mt-1 font-bold text-2xl leading-none text-[#DC2626]">
+                        {localBlockedTimes.length}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                  <p className="mt-4 text-[10px] leading-relaxed text-[#64748B]">
+                    Kırmızı işaretli saatler o gün için randevuya kapatılır. Kaydetmeyi
+                    unutma.
+                  </p>
+                </Panel>
+
+                <Panel title="Aktif personel" subtitle="Program sahibi" icon={Users}>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F8FAFC] font-bold text-base text-[#2563EB]">
+                      {getInitials(activeBarber?.name)}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-[#0F172A]">
+                        {activeBarber?.name || 'Seçim bekleniyor'}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-[#64748B]">
+                        {permanentHours.length} saatlik program
+                      </p>
+                    </div>
+                  </div>
+                </Panel>
+              </aside>
+            </div>
+          </div>
+        )}
+      </div>
 
       {hasChanges && (
-        <div className="fixed inset-x-4 bottom-20 z-40 md:hidden">
-          <Button
+        <div className="fixed inset-x-4 bottom-4 z-40 md:hidden">
+          <button
             type="button"
-            onClick={activeTab === 'permanent' ? savePermanentHours : saveExceptionHours}
+            onClick={
+              activeTab === 'permanent'
+                ? () => void savePermanentHours()
+                : () => void saveExceptionHours()
+            }
             disabled={isSaving}
-            className="h-12 w-full rounded-xl bg-ink font-semibold text-cream shadow-lg hover:bg-ink-soft"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="h-4 w-4" aria-hidden="true" />
             )}
-            Değişiklikleri Kaydet
-          </Button>
+            Değişiklikleri kaydet
+          </button>
         </div>
       )}
 
       <ConfirmModal
         isOpen={modalConfig.isOpen}
-        onClose={() => setModalConfig(prev => ({...prev, isOpen: false}))}
-        onConfirm={() => setModalConfig(prev => ({...prev, isOpen: false}))}
+        onClose={() => setModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={() => setModalConfig((prev) => ({ ...prev, isOpen: false }))}
         title={modalConfig.title}
         description={modalConfig.desc}
         type={modalConfig.type}

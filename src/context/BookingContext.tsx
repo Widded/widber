@@ -5,6 +5,7 @@ export type Service = {
   name: string;
   duration: number; // in minutes
   price: number;
+  category?: string | null;
 };
 
 export interface Barber {
@@ -12,6 +13,7 @@ export interface Barber {
   name: string;
   pin?: string;
   working_hours?: string[];
+  is_demo?: boolean;
 };
 
 export type AppointmentData = {

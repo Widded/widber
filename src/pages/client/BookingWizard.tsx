@@ -6,14 +6,17 @@ import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { useBooking, Service, Barber } from '../../context/BookingContext';
-import { Check, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Check, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, User, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { cn } from '../../lib/utils';
-import { addDays, format, getDay, startOfDay, isToday, parse, addMinutes } from 'date-fns';
+import { getBookingDates } from '../../lib/bookingDates';
+import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
 import { useAvailableTimes } from '../../hooks/useAvailableTimes';
+import { splitTimeSlots } from '../../lib/availability';
 import { supabase } from '../../lib/supabase';
+import { isSlotConflictError, SLOT_CONFLICT_MESSAGE } from '../../lib/bookingErrors';
 import emailjs from '@emailjs/browser';
 
 const STEPS = [
@@ -37,6 +40,7 @@ const BookingWizard = () => {
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(appointment.barber);
   const [selectedDate, setSelectedDate] = useState<string>(appointment.date ? format(appointment.date, 'yyyy-MM-dd') : '');
   const [selectedTime, setSelectedTime] = useState<string | null>(appointment.time);
+  const [showFullTimes, setShowFullTimes] = useState(false);
   
   // Form state
   const [firstName, setFirstName] = useState(appointment.customerInfo?.firstName || '');
@@ -73,7 +77,18 @@ const BookingWizard = () => {
   const totalDuration = selectedServices.reduce((acc, curr) => acc + curr.duration, 0);
   const totalPrice = selectedServices.reduce((acc, curr) => acc + curr.price, 0);
 
-  const { bookedTimes, fetchingTimes } = useAvailableTimes(selectedDate, selectedBarber, totalDuration);
+  const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(selectedDate, selectedBarber, totalDuration);
+
+  const workingHours = selectedBarber?.working_hours || [];
+  const { available: availableTimes, full: fullTimes } = splitTimeSlots(
+    workingHours,
+    bookedTimes,
+    selectedDate
+  );
+
+  React.useEffect(() => {
+    setShowFullTimes(false);
+  }, [selectedDate, selectedBarber?.id]);
 
   // Scroll handling
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -88,21 +103,8 @@ const BookingWizard = () => {
     }
   };
 
-  // Generate dates
-  const availableDates = React.useMemo(() => {
-    const dates = [];
-    let currentDate = startOfDay(new Date());
-    let daysAdded = 0;
-    
-    while (daysAdded < 18) {
-      if (getDay(currentDate) !== 0) { // 0 is Sunday
-        dates.push(currentDate);
-        daysAdded++;
-      }
-      currentDate = addDays(currentDate, 1);
-    }
-    return dates;
-  }, []);
+  // Generate dates: today + 7 days, Sundays excluded
+  const availableDates = React.useMemo(() => getBookingDates(), []);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, ''); // Sadece rakamlar
@@ -153,10 +155,13 @@ const BookingWizard = () => {
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
-      // 1. Create Appointment
-      const { data: appData, error: appError } = await supabase
+      // 1. Randevu ID'sini istemcide üret: insert sonrası anon SELECT izni gerekmiyor.
+      const appointmentId = crypto.randomUUID();
+
+      const { error: appError } = await supabase
         .from('appointments')
         .insert([{
+          id: appointmentId,
           customer_first_name: firstName,
           customer_last_name: lastName,
           phone: phone,
@@ -164,26 +169,23 @@ const BookingWizard = () => {
           appointment_time: selectedTime,
           barber_id: selectedBarber?.id,
           total_price: totalPrice,
-          total_duration: totalDuration
-        }])
-        .select('id')
-        .single();
-        
+          total_duration: totalDuration,
+          status: 'approved'
+        }]);
+
       if (appError) throw appError;
 
-      // 2. Insert Services mapping
-      if (appData) {
-        const serviceMappings = selectedServices.map(s => ({
-          appointment_id: appData.id,
-          service_id: s.id
-        }));
-        
-        const { error: mappingError } = await supabase
-          .from('appointment_services')
-          .insert(serviceMappings);
-          
-        if (mappingError) throw mappingError;
-      }
+      // 2. Hizmet eşleşmelerini aynı ID ile ekle.
+      const serviceMappings = selectedServices.map(s => ({
+        appointment_id: appointmentId,
+        service_id: s.id
+      }));
+
+      const { error: mappingError } = await supabase
+        .from('appointment_services')
+        .insert(serviceMappings);
+
+      if (mappingError) throw mappingError;
 
       setIsSubmitting(false);
       setModalState({
@@ -200,12 +202,30 @@ const BookingWizard = () => {
       resetAppointment();
     } catch (err) {
       console.error("Randevu oluşturulurken hata:", err);
-      setModalState({
-        isOpen: true,
-        type: 'danger',
-        title: 'Hata',
-        description: 'Randevu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.'
-      });
+      const supabaseError = err as { code?: string; message?: string };
+
+      if (isSlotConflictError(err)) {
+        setSelectedTime(null);
+        setCurrentStep(3);
+        refreshTimes();
+        window.dispatchEvent(new Event('widber:booking-conflict'));
+        setModalState({
+          isOpen: true,
+          type: 'danger',
+          title: 'Saat doldu',
+          description: SLOT_CONFLICT_MESSAGE,
+        });
+      } else {
+        setModalState({
+          isOpen: true,
+          type: 'danger',
+          title: 'Hata',
+          description:
+            supabaseError?.code === '42501'
+              ? 'Randevu oluşturulamadı: veritabanı izni eksik. Lütfen yönetici ile iletişime geçin.'
+              : supabaseError?.message || 'Randevu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.',
+        });
+      }
       setIsSubmitting(false);
     }
   };
@@ -214,14 +234,14 @@ const BookingWizard = () => {
     switch (currentStep) {
       case 1: return selectedServices.length === 0;
       case 2: return selectedBarber === null;
-      case 3: return !selectedDate || !selectedTime;
+      case 3: return !selectedDate || !selectedTime || !availableTimes.includes(selectedTime);
       case 4: return !firstName || !lastName || phone.length !== 11 || !phone.startsWith('05');
       default: return false;
     }
   };
 
   return (
-    <div className="min-h-screen py-16 px-6 bg-[#FAFAFA]">
+    <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 sm:py-12">
       <div className="max-w-3xl mx-auto">
         {/* Progress Tracker */}
         <div className="mb-8">
@@ -230,8 +250,8 @@ const BookingWizard = () => {
               <div key={step.id} className="flex flex-col items-center">
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold mb-2 transition-colors",
-                  currentStep === step.id ? "bg-black text-white shadow-md" : 
-                  currentStep > step.id ? "bg-black/5 text-gray-800" : "bg-white border border-border text-muted-foreground"
+                  currentStep === step.id ? "bg-blue-600 text-white shadow-sm" : 
+                  currentStep > step.id ? "bg-blue-50 text-blue-700" : "bg-white border border-slate-200 text-slate-400"
                 )}>
                   {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
                 </div>
@@ -239,22 +259,22 @@ const BookingWizard = () => {
               </div>
             ))}
           </div>
-          <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+          <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-black transition-all duration-300 ease-in-out"
+              className="h-full bg-blue-600 transition-all duration-300 ease-in-out"
               style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}
             />
           </div>
         </div>
 
         {/* Form Container */}
-        <Card className="bg-white border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[2rem] overflow-hidden min-h-[400px] flex flex-col relative">
+        <Card className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden min-h-[400px] flex flex-col relative">
           {loading && (
             <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-50 flex items-center justify-center">
-               <Loader2 className="w-8 h-8 animate-spin text-black" />
+               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
           )}
-          <div className="p-6 md:p-8 flex-1">
+          <div className="p-4 sm:p-6 md:p-8 flex-1">
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentStep}
@@ -267,7 +287,7 @@ const BookingWizard = () => {
                 {/* STEP 1: Services */}
                 {currentStep === 1 && (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold mb-4 text-foreground">Hizmet Seçimi</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900">Hizmet Seçimi</h2>
                     <div className="grid gap-4">
                       {SERVICES.map(service => {
                         const isSelected = selectedServices.some(s => s.id === service.id);
@@ -276,21 +296,21 @@ const BookingWizard = () => {
                             key={service.id}
                             onClick={() => toggleService(service)}
                             className={cn(
-                              "p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center group",
-                              isSelected ? "border-black bg-black/5 shadow-sm" : "border-border bg-white hover:border-black/10 hover:shadow-sm"
+                              "flex cursor-pointer items-start justify-between gap-3 rounded-xl border p-3.5 transition-all sm:p-4",
+                              isSelected ? "border-blue-600 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm"
                             )}
                           >
-                            <div>
-                              <h3 className="font-semibold text-lg text-foreground">{service.name}</h3>
-                              <p className="text-sm font-medium text-muted-foreground">{service.duration} Dk</p>
+                            <div className="min-w-0">
+                              <h3 className="text-base font-semibold leading-snug text-slate-900">{service.name}</h3>
+                              <p className="mt-1 text-xs font-medium text-slate-500">{service.duration} dk</p>
                             </div>
-                            <div className="flex items-center space-x-4">
-                              <span className="font-bold text-lg text-foreground">₺{service.price}</span>
+                            <div className="flex shrink-0 flex-col items-end gap-1.5">
+                              <span className="text-sm font-bold text-slate-900">₺{service.price}</span>
                               <div className={cn(
-                                "w-6 h-6 rounded-full border flex items-center justify-center transition-colors",
-                                isSelected ? "border-black bg-black text-white" : "border-border bg-secondary"
+                                "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
+                                isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
                               )}>
-                                {isSelected && <Check className="w-4 h-4" />}
+                                {isSelected && <Check className="h-3 w-3" />}
                               </div>
                             </div>
                           </div>
@@ -303,7 +323,7 @@ const BookingWizard = () => {
                 {/* STEP 2: Barber */}
                 {currentStep === 2 && (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold mb-4 text-foreground">Personel Seçimi</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900">Personel Seçimi</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {BARBERS.map(barber => {
                         const isSelected = selectedBarber?.id === barber.id;
@@ -312,21 +332,21 @@ const BookingWizard = () => {
                             key={barber.id}
                             onClick={() => setSelectedBarber(barber)}
                             className={cn(
-                              "p-4 rounded-xl border cursor-pointer transition-all flex items-center space-x-4",
-                              isSelected ? "border-black bg-black/5 shadow-sm" : "border-border bg-white hover:border-black/10 hover:shadow-sm"
+                              "flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-all sm:p-4",
+                              isSelected ? "border-blue-600 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm"
                             )}
                           >
-                            <div className="w-12 h-12 rounded-full border border-border bg-secondary flex items-center justify-center text-muted-foreground">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-slate-500">
                               <User className="w-5 h-5" />
                             </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg">{barber.name}</h3>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-base font-semibold text-slate-900">{barber.name}</h3>
                             </div>
                             <div className={cn(
-                                "w-6 h-6 rounded-full border flex items-center justify-center transition-colors",
-                                isSelected ? "border-black bg-black text-white" : "border-border bg-secondary"
+                                "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
+                                isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"
                               )}>
-                                {isSelected && <Check className="w-4 h-4" />}
+                                {isSelected && <Check className="h-3 w-3" />}
                             </div>
                           </div>
                         )
@@ -338,17 +358,17 @@ const BookingWizard = () => {
                 {/* STEP 3: Date & Time */}
                 {currentStep === 3 && (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold mb-4 text-foreground">Tarih ve Saat Seçimi</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900">Tarih ve Saat Seçimi</h2>
                     <div className="space-y-6">
                       <div>
-                        <Label className="mb-3 block font-semibold text-foreground text-sm">Tarih Seçin</Label>
+                        <Label className="mb-3 block font-semibold text-slate-700 text-sm">Tarih Seçin</Label>
                         <div className="relative group">
                           {/* Left Gradient & Arrow */}
-                          <div className="absolute left-0 top-0 bottom-2 w-16 bg-gradient-to-r from-white to-transparent z-10 flex items-center justify-start pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute left-0 top-0 bottom-2 hidden w-16 bg-gradient-to-r from-white to-transparent z-10 items-center justify-start pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity sm:flex">
                             <Button 
                               variant="secondary" 
                               size="icon" 
-                              className="w-10 h-10 rounded-full border border-border shadow-sm pointer-events-auto bg-white hover:bg-secondary text-foreground"
+                              className="w-10 h-10 rounded-full border border-slate-200 shadow-sm pointer-events-auto bg-white hover:bg-slate-50 text-slate-600"
                               onClick={(e) => { e.preventDefault(); scrollDates('left'); }}
                             >
                               <ChevronLeft className="w-4 h-4" />
@@ -371,8 +391,8 @@ const BookingWizard = () => {
                                     setSelectedTime(null);
                                   }}
                                   className={cn(
-                                    "snap-center flex-shrink-0 flex flex-col items-center justify-center p-3 rounded-xl border transition-all min-w-[90px]",
-                                    isSelected ? "border-black bg-black text-white shadow-md" : "border-border bg-white text-foreground hover:border-black/10 hover:shadow-sm"
+                                    "snap-center flex-shrink-0 flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all min-w-[76px] sm:min-w-[90px] sm:p-3",
+                                    isSelected ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-900 hover:border-blue-300 hover:shadow-sm"
                                   )}
                                 >
                                   <span className={cn("text-xs font-medium uppercase mb-1", isSelected ? "text-white/90" : "text-muted-foreground")}>{format(date, 'EEEE', { locale: tr })}</span>
@@ -384,11 +404,11 @@ const BookingWizard = () => {
                           </div>
 
                           {/* Right Gradient & Arrow */}
-                          <div className="absolute right-0 top-0 bottom-2 w-16 bg-gradient-to-l from-white to-transparent z-10 flex items-center justify-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute right-0 top-0 bottom-2 hidden w-16 bg-gradient-to-l from-white to-transparent z-10 items-center justify-end pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity sm:flex">
                             <Button 
                               variant="secondary" 
                               size="icon" 
-                              className="w-10 h-10 rounded-full border border-border shadow-sm pointer-events-auto bg-white hover:bg-secondary text-foreground"
+                              className="w-10 h-10 rounded-full border border-slate-200 shadow-sm pointer-events-auto bg-white hover:bg-slate-50 text-slate-600"
                               onClick={(e) => { e.preventDefault(); scrollDates('right'); }}
                             >
                               <ChevronRight className="w-4 h-4" />
@@ -401,86 +421,48 @@ const BookingWizard = () => {
                         <motion.div 
                           initial={{ opacity: 0, height: 0 }} 
                           animate={{ opacity: 1, height: 'auto' }}
-                          className="pt-4 border-t border-border"
+                          className="pt-4 border-t border-slate-200"
                         >
                           <div className="flex items-center justify-between mb-3">
-                            <Label className="block font-semibold text-foreground text-sm">Müsait Saatler</Label>
-                            {fetchingTimes && <Loader2 className="w-4 h-4 animate-spin text-black" />}
+                            <Label className="block font-semibold text-slate-700 text-sm">Müsait Saatler</Label>
+                            {fetchingTimes && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
                           </div>
                           
                           {(!selectedBarber?.working_hours || selectedBarber.working_hours.length === 0) ? (
-                            <div className="text-center py-8 text-muted-foreground bg-secondary/20 rounded-xl">
+                            <div className="rounded-xl bg-slate-50 py-8 text-center text-slate-500">
                               Bu personelin çalışma saati tanımlanmamış.
                             </div>
                           ) : (
-                            (() => {
-                              const hasAvailableSlots = selectedBarber.working_hours.some(time => {
-                                let isBooked = bookedTimes.includes(time);
-                                if (!isBooked && selectedDate) {
-                                  const dateObj = new Date(selectedDate);
-                                  if (isToday(dateObj)) {
-                                    let timeDate = parse(time, 'HH:mm', new Date());
-                                    if (timeDate.getHours() < 6) timeDate = addDays(timeDate, 1);
-                                    if (timeDate < new Date()) isBooked = true;
-                                  }
-                                }
-                                return !isBooked;
-                              });
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                                <span>{availableTimes.length} müsait saat</span>
+                                {fullTimes.length > 0 && <span>{fullTimes.length} dolu</span>}
+                              </div>
 
-                              if (!hasAvailableSlots && !fetchingTimes) {
-                                return (
-                                  <div className="space-y-4">
-                                    <div className="text-center py-4 font-semibold text-red-500 bg-red-50 rounded-xl border border-red-100 flex flex-col items-center gap-2">
-                                      <AlertCircle className="w-6 h-6 opacity-80" />
-                                      <span className="text-sm">Personel bu tarihte tamamen doludur.</span>
-                                    </div>
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 opacity-60 pointer-events-none">
-                                      {selectedBarber.working_hours.map(time => (
-                                        <div key={time} className="py-2.5 px-3 rounded-xl border border-red-100 bg-red-50/50 text-red-400 font-medium text-center text-sm">
-                                          <span className="line-through">{time}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                  {selectedBarber.working_hours.map(time => {
+                              {availableTimes.length === 0 ? (
+                                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-5 text-center">
+                                  <AlertCircle className="mx-auto h-6 w-6 text-red-500/80" />
+                                  <p className="mt-2 text-sm font-semibold text-red-600">
+                                    Personel bu tarihte tamamen dolu.
+                                  </p>
+                                  <p className="mt-1 text-xs text-red-500/80">
+                                    Başka bir gün seçebilirsin.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                                  {availableTimes.map((time) => {
                                     const isSelected = selectedTime === time;
-                                    let isBooked = bookedTimes.includes(time);
-                                    
-                                    if (!isBooked && selectedDate) {
-                                      const dateObj = new Date(selectedDate);
-                                      if (isToday(dateObj)) {
-                                        let timeDate = parse(time, 'HH:mm', new Date());
-                                        if (timeDate.getHours() < 6) timeDate = addDays(timeDate, 1);
-                                        if (timeDate < new Date()) isBooked = true;
-                                      }
-                                    }
-                                    
-                                    if (isBooked) {
-                                      return (
-                                        <button
-                                          key={time}
-                                          disabled
-                                          className="py-2.5 px-3 rounded-xl border border-red-100 bg-red-50/40 text-red-400 font-medium text-center text-sm cursor-not-allowed opacity-70 flex items-center justify-center relative overflow-hidden"
-                                        >
-                                          <span className="line-through">{time}</span>
-                                        </button>
-                                      );
-                                    }
-
                                     return (
                                       <button
                                         key={time}
+                                        type="button"
                                         onClick={() => setSelectedTime(time)}
                                         className={cn(
-                                          "py-2.5 px-3 rounded-xl border font-medium transition-all text-center text-sm",
-                                          isSelected 
-                                            ? "border-black bg-black text-white shadow-md" 
-                                            : "border-border bg-white text-foreground hover:border-black/10 hover:shadow-sm"
+                                          'rounded-xl border px-3 py-2.5 text-center text-sm font-medium transition-all',
+                                          isSelected
+                                            ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                            : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:shadow-sm'
                                         )}
                                       >
                                         {time}
@@ -488,8 +470,39 @@ const BookingWizard = () => {
                                     );
                                   })}
                                 </div>
-                              );
-                            })()
+                              )}
+
+                              {showFullTimes && fullTimes.length > 0 && (
+                                <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                                  {fullTimes.map((time) => (
+                                    <div
+                                      key={time}
+                                      aria-label={`${time} dolu`}
+                                      className="cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-sm font-medium text-slate-400 line-through"
+                                    >
+                                      {time}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {fullTimes.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowFullTimes((visible) => !visible)}
+                                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                                >
+                                  {showFullTimes ? (
+                                    <EyeOff className="h-4 w-4" aria-hidden="true" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" aria-hidden="true" />
+                                  )}
+                                  {showFullTimes
+                                    ? 'Sadece müsait saatleri göster'
+                                    : `Dolu saatleri göster (${fullTimes.length})`}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </motion.div>
                       )}
@@ -500,7 +513,7 @@ const BookingWizard = () => {
                 {/* STEP 4: Info */}
                 {currentStep === 4 && (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold mb-4 text-foreground">İletişim Bilgileri</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900">İletişim Bilgileri</h2>
                     <div className="space-y-5">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div className="space-y-2">
@@ -508,7 +521,7 @@ const BookingWizard = () => {
                           <Input 
                             id="firstName" 
                             placeholder="Adınız" 
-                            className="rounded-lg border-border focus-visible:ring-black focus-visible:ring-1 py-5"
+                            className="rounded-lg border-slate-200 py-5 focus-visible:ring-1 focus-visible:ring-blue-500"
                             value={firstName}
                             onChange={(e) => setFirstName(e.target.value)}
                           />
@@ -518,7 +531,7 @@ const BookingWizard = () => {
                           <Input 
                             id="lastName" 
                             placeholder="Soyadınız" 
-                            className="rounded-lg border-border focus-visible:ring-black focus-visible:ring-1 py-5"
+                            className="rounded-lg border-slate-200 py-5 focus-visible:ring-1 focus-visible:ring-blue-500"
                             value={lastName}
                             onChange={(e) => setLastName(e.target.value)}
                           />
@@ -530,7 +543,7 @@ const BookingWizard = () => {
                           id="email" 
                           type="email"
                           placeholder="ornek@mail.com" 
-                          className="rounded-lg border-border focus-visible:ring-black focus-visible:ring-1 py-5"
+                          className="rounded-lg border-slate-200 py-5 focus-visible:ring-1 focus-visible:ring-blue-500"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                         />
@@ -542,7 +555,7 @@ const BookingWizard = () => {
                           id="phone" 
                           type="tel"
                           placeholder="05XX XXX XX XX" 
-                          className="rounded-lg border-border focus-visible:ring-black focus-visible:ring-1 py-5 tracking-wider"
+                          className="rounded-lg border-slate-200 py-5 tracking-wider focus-visible:ring-1 focus-visible:ring-blue-500"
                           value={phone}
                           onChange={handlePhoneChange}
                         />
@@ -557,14 +570,14 @@ const BookingWizard = () => {
                 {/* STEP 5: Summary */}
                 {currentStep === 5 && (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold mb-4 text-foreground">Randevu Özeti</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold mb-4 text-slate-900">Randevu Özeti</h2>
                     
-                    <div className="bg-secondary/30 border border-border/50 rounded-2xl p-6 space-y-6 shadow-sm">
-                      <div className="grid sm:grid-cols-2 gap-6">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-5 sm:p-6">
+                      <div className="grid gap-5 sm:grid-cols-2 sm:gap-6">
                         <div>
                           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Müşteri</h4>
                           <p className="font-semibold text-lg">{firstName} {lastName}</p>
-                          <p className="text-sm font-medium text-foreground/80">{phone}</p>
+                          <p className="text-sm font-medium text-slate-500">{phone}</p>
                         </div>
                         <div>
                           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Personel</h4>
@@ -573,17 +586,17 @@ const BookingWizard = () => {
                         <div>
                           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Tarih & Saat</h4>
                           <p className="font-semibold text-lg flex items-center">
-                            <CalendarIcon className="w-4 h-4 mr-2 text-gray-800" />
+                            <CalendarIcon className="w-4 h-4 mr-2 text-blue-600" />
                             {selectedDate && new Date(selectedDate).toLocaleDateString('tr-TR')}
                           </p>
                           <p className="font-semibold text-lg flex items-center mt-1">
-                            <Clock className="w-4 h-4 mr-2 text-gray-800" />
+                            <Clock className="w-4 h-4 mr-2 text-blue-600" />
                             {selectedTime}
                           </p>
                         </div>
                       </div>
 
-                      <div className="border-t border-border/60 pt-4">
+                      <div className="border-t border-slate-200 pt-4">
                         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Hizmetler</h4>
                         <div className="space-y-2">
                           {selectedServices.map(s => (
@@ -593,17 +606,17 @@ const BookingWizard = () => {
                             </div>
                           ))}
                         </div>
-                        <div className="flex justify-between font-bold text-xl border-t border-border/60 mt-4 pt-4">
+                        <div className="flex justify-between font-bold text-xl border-t border-slate-200 mt-4 pt-4">
                           <span>Toplam</span>
-                          <span className="text-gray-800">₺{totalPrice}</span>
+                          <span className="text-slate-900">₺{totalPrice}</span>
                         </div>
                         <p className="text-xs font-medium text-muted-foreground mt-1">Toplam Süre: {totalDuration} Dakika</p>
                       </div>
                     </div>
 
-                    <div className="bg-#F5F5F7 border border-black/5 rounded-xl p-4 flex items-start space-x-3 text-sm">
-                      <AlertCircle className="w-5 h-5 text-gray-800 shrink-0 mt-0.5" />
-                      <p className="text-gray-900">
+                    <div className="flex items-start space-x-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                      <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-slate-700">
                         <strong className="block mb-1 font-semibold">Ödeme Bilgisi</strong>
                         Sistem üzerinden herhangi bir ücret alınmamaktadır. Ödemenizi hizmet bitiminde dükkanda yapabilirsiniz.
                       </p>
@@ -615,12 +628,12 @@ const BookingWizard = () => {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-6 border-t border-border/50 bg-secondary/20 flex justify-between items-center mt-auto">
+          <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50/60 flex flex-col gap-2 mt-auto sm:flex-row sm:items-center sm:justify-between">
             <Button 
               variant="outline" 
               onClick={handleBack}
               disabled={currentStep === 1}
-              className={cn("rounded-full font-semibold border-border hover:bg-secondary transition-all", currentStep === 1 ? 'invisible' : '')}
+              className={cn("w-full rounded-lg font-semibold border-slate-200 hover:bg-white transition-all sm:w-auto", currentStep === 1 ? 'hidden sm:inline-flex sm:invisible' : '')}
             >
               <ChevronLeft className="w-4 h-4 mr-1" />
               Geri
@@ -630,7 +643,7 @@ const BookingWizard = () => {
               <Button 
                 onClick={handleNext} 
                 disabled={isNextDisabled()}
-                className="rounded-full bg-black hover:bg-gray-800 text-white font-semibold transition-all px-8 disabled:opacity-50"
+                className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all px-7 disabled:opacity-40 sm:w-auto"
               >
                 İleri
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -639,7 +652,7 @@ const BookingWizard = () => {
               <Button 
                 onClick={handleConfirm}
                 disabled={isSubmitting}
-                className="rounded-full bg-stone-900 hover:bg-stone-800 text-white font-semibold transition-all px-10 shadow-md hover:shadow-lg"
+                className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all px-6 shadow-sm sm:w-auto sm:px-8"
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Randevuyu Tamamla'}
                 {!isSubmitting && <Check className="w-5 h-5 ml-2" />}

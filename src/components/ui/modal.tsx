@@ -31,7 +31,7 @@ export const Modal: React.FC<ModalProps> = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           />
           
           {/* Modal Box */}
@@ -41,21 +41,29 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 10 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className={`bg-white rounded-2xl shadow-2xl border border-border overflow-hidden w-full ${maxWidth} relative z-10 mx-4 flex flex-col max-h-[90vh]`}
+            className={`bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden w-full ${maxWidth} relative z-10 mx-4 flex flex-col max-h-[90vh]`}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-border/50 bg-secondary/10">
-              <div className="flex items-center space-x-3">
-                {icon && <div className="p-2 bg-white rounded-xl shadow-sm border border-border/50">{icon}</div>}
-                <h3 className="text-xl font-bold text-foreground">{title}</h3>
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white p-4 sm:p-5">
+              <div className="flex items-center gap-3">
+                {icon && (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    {icon}
+                  </div>
+                )}
+                <h3 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h3>
               </div>
-              <button onClick={onClose} className="text-muted-foreground hover:bg-secondary p-2 rounded-lg transition-colors">
+              <button
+                onClick={onClose}
+                aria-label="Kapat"
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             {/* Content */}
-            <div className="p-6 overflow-y-auto">
+            <div className="overflow-y-auto p-4 sm:p-5">
               {children}
             </div>
           </motion.div>

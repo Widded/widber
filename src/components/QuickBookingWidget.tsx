@@ -1,266 +1,537 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar as CalendarIcon, Clock, Scissors, User, ArrowRight, Loader2, AlertCircle, Check } from 'lucide-react';
-import { format, addDays, isToday, parse } from 'date-fns';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Clock3,
+  Loader2,
+  Scissors,
+  UserRound,
+} from 'lucide-react';
+import { format, isSameDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import { useAvailableTimes } from '../hooks/useAvailableTimes';
 import { useBooking } from '../context/BookingContext';
+import { splitTimeSlots } from '../lib/availability';
+import { getBookingDates } from '../lib/bookingDates';
+import { formatPrice } from '../lib/appointmentUtils';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
   onComplete: () => void;
 }
 
+type FieldKey = 'service' | 'barber' | 'date' | 'time';
+
+const getInitials = (name: string) =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'P';
+
+type PickerFieldProps = {
+  field: FieldKey;
+  label: string;
+  icon: React.ElementType;
+  value: string;
+  placeholder: string;
+  activeField: FieldKey | null;
+  setActiveField: (field: FieldKey | null) => void;
+  disabled?: boolean;
+  panelClassName: string;
+  children: React.ReactNode;
+};
+
+const PickerField = ({
+  field,
+  label,
+  icon: Icon,
+  value,
+  placeholder,
+  activeField,
+  setActiveField,
+  disabled,
+  panelClassName,
+  children,
+}: PickerFieldProps) => {
+  const open = activeField === field;
+
+  return (
+    <div className="relative">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <button
+        type="button"
+        onClick={() => !disabled && setActiveField(open ? null : field)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`${label}: ${value || placeholder}`}
+        className={cn(
+          'mt-1.5 flex h-11 w-full items-center gap-2 rounded-lg border bg-white px-3 text-left text-sm transition-all',
+          open
+            ? 'border-blue-500 ring-2 ring-blue-100'
+            : 'border-slate-200 hover:border-slate-300',
+          disabled && 'cursor-not-allowed bg-slate-50 text-slate-400'
+        )}
+      >
+        <Icon
+          className={cn('h-4 w-4 shrink-0', disabled ? 'text-slate-300' : 'text-slate-400')}
+          aria-hidden="true"
+        />
+        <span
+          className={cn(
+            'flex-1 truncate',
+            value ? 'font-medium text-slate-900' : 'text-slate-400'
+          )}
+        >
+          {value || placeholder}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-slate-400 transition-transform',
+            open && 'rotate-180'
+          )}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className={cn(
+            'absolute top-full z-50 mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70',
+            panelClassName
+          )}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComplete }) => {
   const { services, barbers, loading } = useSupabaseData();
-  const { appointment, setServices, setBarber, setDateTime } = useBooking();
-  
-  const [activePopover, setActivePopover] = useState<'service' | 'barber' | 'date' | 'time' | null>(null);
-  const widgetRef = useRef<HTMLDivElement>(null);
+  const { setServices, setBarber, setDateTime } = useBooking();
+  const widgetRef = useRef<HTMLFormElement>(null);
 
-  // Local selections mapped to Context
-  const selectedServiceText = appointment.services.length > 0 ? (appointment.services.length === 1 ? appointment.services[0].name : `${appointment.services.length} Hizmet`) : 'Seçiniz';
-  const selectedBarber = appointment.barber || null;
-  const selectedDate = appointment.date ? format(appointment.date, 'yyyy-MM-dd') : null;
-  const selectedTime = appointment.time || null;
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [barberId, setBarberId] = useState('');
+  const [dateStr, setDateStr] = useState('');
+  const [time, setTime] = useState('');
+  const [activeField, setActiveField] = useState<FieldKey | null>(null);
 
-  const totalDuration = appointment.services.reduce((acc, curr) => acc + curr.duration, 0);
-  
-  const { bookedTimes, fetchingTimes } = useAvailableTimes(
-    selectedDate || '', 
-    selectedBarber, 
+  const selectedServices = services.filter((service) => serviceIds.includes(service.id));
+  const selectedBarber = barbers.find((barber) => barber.id === barberId) ?? null;
+  const totalDuration = selectedServices.reduce(
+    (sum, service) => sum + service.duration,
+    0
+  );
+  const totalPrice = selectedServices.reduce((sum, service) => sum + service.price, 0);
+  const serviceLabel =
+    selectedServices.length === 0
+      ? ''
+      : selectedServices.length === 1
+        ? selectedServices[0].name
+        : `${selectedServices.length} hizmet`;
+
+  const availableDates = useMemo(() => getBookingDates(), []);
+
+  const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(
+    dateStr,
+    selectedBarber,
     totalDuration
   );
 
-  // Generate 28 days
-  const availableDates = Array.from({ length: 28 }).map((_, i) => addDays(new Date(), i));
+  useEffect(() => {
+    const handleBookingConflict = () => {
+      setTime('');
+      refreshTimes();
+    };
 
-  // Click outside to close popovers
+    window.addEventListener('widber:booking-conflict', handleBookingConflict);
+    return () =>
+      window.removeEventListener('widber:booking-conflict', handleBookingConflict);
+  }, [refreshTimes]);
+
+  const { available: availableTimes } = splitTimeSlots(
+    selectedBarber?.working_hours ?? [],
+    bookedTimes,
+    dateStr || null
+  );
+
+  const canSubmit =
+    selectedServices.length > 0 &&
+    Boolean(selectedBarber && dateStr && time) &&
+    availableTimes.includes(time);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (widgetRef.current && !widgetRef.current.contains(event.target as Node)) {
-        setActivePopover(null);
+        setActiveField(null);
       }
     };
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleNext = () => {
-    if (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) {
-      onComplete(); // Opens the modal for Contact Info
-    } else {
-      // Auto open next missing step
-      if (appointment.services.length === 0) setActivePopover('service');
-      else if (!selectedBarber) setActivePopover('barber');
-      else if (!selectedDate) setActivePopover('date');
-      else if (!selectedTime) setActivePopover('time');
-    }
+  useEffect(() => {
+    if (!activeField) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveField(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeField]);
+
+  const toggleService = (id: string) => {
+    setServiceIds((prev) =>
+      prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]
+    );
+    setTime('');
+  };
+
+  const selectBarber = (id: string) => {
+    setBarberId(id);
+    setTime('');
+    setActiveField('date');
+  };
+
+  const selectDate = (value: string) => {
+    setDateStr(value);
+    setTime('');
+    setActiveField('time');
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (selectedServices.length === 0 || !selectedBarber || !dateStr || !time) return;
+
+    setServices(selectedServices);
+    setBarber(selectedBarber);
+    setDateTime(parseISO(dateStr), time);
+    onComplete();
   };
 
   if (loading) {
-    return <div className="h-24 w-full flex items-center justify-center bg-white/80 rounded-3xl"><Loader2 className="animate-spin text-gray-400" /></div>;
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="h-5 w-32 animate-pulse rounded bg-slate-100" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((item) => (
+            <div key={item} className="h-16 animate-pulse rounded-lg bg-slate-50" />
+          ))}
+        </div>
+        <div className="mt-4 h-11 animate-pulse rounded-lg bg-slate-100" />
+      </div>
+    );
   }
 
   return (
-    <div ref={widgetRef} className="relative bg-white/95 text-ink p-4 md:p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-black/5 flex flex-col md:flex-row items-center gap-4">
-      
-      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
-        
-        {/* SERVICE */}
-        <div className="relative">
-          <button 
-            type="button"
-            onClick={() => setActivePopover(activePopover === 'service' ? null : 'service')}
-            aria-expanded={activePopover === 'service'}
-            className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'service' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
-          >
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'service' ? 'bg-white/20' : 'bg-white')}>
-              <Scissors className={cn("w-4 h-4", activePopover === 'service' ? 'text-white' : 'text-gray-600 group-hover:text-black')} />
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className={cn("text-[11px] font-semibold uppercase tracking-wide", activePopover === 'service' ? 'text-gray-300' : 'text-gray-500')}>Hizmet</span>
-              <span className="text-[13px] font-medium truncate">{selectedServiceText}</span>
-            </div>
-          </button>
-          
-          <AnimatePresence>
-            {activePopover === 'service' && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 w-64 mt-2 p-2 bg-white rounded-2xl shadow-xl border border-black/5 z-50">
-                <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
-                  {services.map(srv => {
-                    const isSelected = appointment.services.some(s => s.id === srv.id);
-                    return (
-                      <button 
-                        key={srv.id} 
-                        type="button"
-                        role="checkbox"
-                        aria-checked={isSelected}
-                        onClick={() => { 
-                          if (isSelected) {
-                            setServices(appointment.services.filter(s => s.id !== srv.id));
-                          } else {
-                            setServices([...appointment.services, srv]);
-                          }
-                        }} 
-                        className={cn("w-full text-left p-3 rounded-xl flex justify-between items-center transition-colors", isSelected ? "bg-black/5" : "hover:bg-gray-50")}
-                      >
-                        <span className="font-medium text-sm text-gray-800 flex items-center gap-3">
-                          <div className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors", isSelected ? "bg-black border-black text-white" : "border-gray-300 bg-white")}>
-                            {isSelected && <Check className="w-3 h-3" />}
-                          </div>
-                          {srv.name}
-                        </span>
-                        <span className="text-xs text-gray-400 font-semibold">{srv.duration} Dk</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+    <form
+      ref={widgetRef}
+      onSubmit={handleSubmit}
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Hızlı randevu</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Hizmetini seç, saatini ayır.
+          </p>
         </div>
-
-        {/* BARBER */}
-        <div className="relative">
-          <button 
-            type="button"
-            onClick={() => setActivePopover(activePopover === 'barber' ? null : 'barber')}
-            aria-expanded={activePopover === 'barber'}
-            className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'barber' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
-          >
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'barber' ? 'bg-white/20' : 'bg-white')}>
-              <User className={cn("w-4 h-4", activePopover === 'barber' ? 'text-white' : 'text-gray-600 group-hover:text-black')} />
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className={cn("text-[11px] font-semibold uppercase tracking-wide", activePopover === 'barber' ? 'text-gray-300' : 'text-gray-500')}>Personel</span>
-              <span className="text-[13px] font-medium truncate">{selectedBarber ? selectedBarber.name : 'Seçiniz'}</span>
-            </div>
-          </button>
-          
-          <AnimatePresence>
-            {activePopover === 'barber' && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full right-0 md:left-0 md:right-auto w-56 mt-2 p-2 bg-white rounded-2xl shadow-xl border border-black/5 z-50">
-                <div className="space-y-1">
-                  {barbers.map(barber => (
-                    <button key={barber.id} onClick={() => { setBarber(barber); setActivePopover('date'); if (appointment.date) setDateTime(appointment.date, ''); }} className="w-full text-left p-3 rounded-xl hover:bg-gray-50 flex items-center space-x-3 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">{barber.name.charAt(0)}</div>
-                      <span className="font-medium text-sm text-gray-800">{barber.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* DATE */}
-        <div className="relative">
-          <button 
-            type="button"
-            onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
-            aria-expanded={activePopover === 'date'}
-            className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'date' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
-          >
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'date' ? 'bg-white/20' : 'bg-white')}>
-              <CalendarIcon className={cn("w-4 h-4", activePopover === 'date' ? 'text-white' : 'text-gray-600 group-hover:text-black')} />
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className={cn("text-[11px] font-semibold uppercase tracking-wide", activePopover === 'date' ? 'text-gray-300' : 'text-gray-500')}>Tarih</span>
-              <span className="text-[13px] font-medium truncate">{selectedDate ? format(new Date(selectedDate), 'dd MMM', { locale: tr }) : 'Seçiniz'}</span>
-            </div>
-          </button>
-          
-          <AnimatePresence>
-            {activePopover === 'date' && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 w-[300px] md:w-[400px] mt-2 p-3 bg-white rounded-2xl shadow-xl border border-black/5 z-50">
-                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 max-h-72 overflow-y-auto pr-1">
-                  {availableDates.map(date => {
-                    const dateStr = format(date, 'yyyy-MM-dd');
-                    const isSel = selectedDate === dateStr;
-                    return (
-                      <button key={dateStr} onClick={() => { setDateTime(date, ''); setActivePopover('time'); }} className={cn("flex flex-col items-center p-2 rounded-xl border transition-all text-center", isSel ? "border-black bg-black text-white shadow-md" : "border-black/5 hover:border-black/20 bg-[#FAFAFA]")}>
-                        <span className="text-[9px] uppercase opacity-70 mb-1">{format(date, 'EEE', { locale: tr })}</span>
-                        <span className="text-sm font-bold leading-none">{format(date, 'd')}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* TIME */}
-        <div className="relative">
-          <button 
-            type="button"
-            onClick={() => setActivePopover(activePopover === 'time' ? null : 'time')}
-            aria-expanded={activePopover === 'time'}
-            className={cn("w-full flex items-center space-x-3 p-3 rounded-2xl transition-colors text-left border", activePopover === 'time' ? 'bg-black text-white border-black' : 'bg-[#F5F5F7] hover:bg-[#EBEBEF] border-transparent group')}
-          >
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shadow-sm", activePopover === 'time' ? 'bg-white/20' : 'bg-white')}>
-              <Clock className={cn("w-4 h-4", activePopover === 'time' ? 'text-white' : 'text-gray-600 group-hover:text-black')} />
-            </div>
-            <div className="flex flex-col overflow-hidden">
-              <span className={cn("text-[11px] font-semibold uppercase tracking-wide", activePopover === 'time' ? 'text-gray-300' : 'text-gray-500')}>Saat</span>
-              <span className="text-[13px] font-medium truncate">{selectedTime || 'Seçiniz'}</span>
-            </div>
-          </button>
-          
-          <AnimatePresence>
-            {activePopover === 'time' && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full right-0 w-[300px] mt-2 p-4 bg-white rounded-2xl shadow-xl border border-black/5 z-50">
-                {!selectedBarber || !selectedDate ? (
-                  <div className="text-center py-4 text-sm text-gray-500 font-medium">Lütfen önce personel ve tarih seçin.</div>
-                ) : fetchingTimes ? (
-                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2">
-                    {selectedBarber.working_hours?.map(time => {
-                      const isSel = selectedTime === time;
-                      let isBooked = bookedTimes.includes(time);
-                      if (!isBooked && selectedDate) {
-                        const dateObj = new Date(selectedDate);
-                        if (isToday(dateObj)) {
-                          let timeDate = parse(time, 'HH:mm', new Date());
-                          if (timeDate.getHours() < 6) timeDate = addDays(timeDate, 1);
-                          if (timeDate < new Date()) isBooked = true;
-                        }
-                      }
-                      if (isBooked) {
-                        return (
-                          <button key={time} disabled className="py-2 text-center text-xs font-semibold rounded-lg bg-gray-50 text-gray-400 line-through opacity-50 cursor-not-allowed border border-gray-100">{time}</button>
-                        );
-                      }
-                      return (
-                        <button key={time} onClick={() => { setDateTime(new Date(selectedDate), time); setActivePopover(null); }} className={cn("py-2 text-center text-xs font-semibold rounded-lg transition-colors border", isSel ? "bg-black text-white border-black" : "bg-white text-gray-800 border-black/10 hover:border-black/30 hover:bg-gray-50")}>{time}</button>
-                      );
-                    })}
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
+        <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
+          Anında onay
+        </span>
       </div>
-      
-      {/* SUBMIT BUTTON */}
-      <button 
-        type="button"
-        onClick={handleNext} 
-        aria-label="Seçimleri onayla ve randevu formuna geç"
-        className={cn("w-full md:w-auto mt-2 md:mt-0 md:ml-2 h-14 md:h-[68px] md:w-[68px] rounded-2xl flex items-center justify-center transition-all shadow-sm group", 
-          (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) 
-          ? "bg-black text-white hover:scale-105 active:scale-95" 
-          : "bg-gray-200 text-gray-400"
-        )}
-      >
-        <ArrowRight className={cn("w-6 h-6", (appointment.services.length > 0 && selectedBarber && selectedDate && selectedTime) ? "group-hover:translate-x-1 transition-transform" : "")} aria-hidden="true" />
-      </button>
 
-    </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <PickerField
+          field="service"
+          label="Hizmetler"
+          icon={Scissors}
+          value={serviceLabel}
+          placeholder="Hizmet seçin"
+          activeField={activeField}
+          setActiveField={setActiveField}
+          panelClassName="left-0 w-[320px] max-w-[calc(100vw-48px)]"
+        >
+          <div className="px-2 pb-2 pt-1">
+            <p className="text-xs font-semibold text-slate-500">Hizmet seç</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              Birden fazla hizmet seçebilirsin.
+            </p>
+          </div>
+          <div className="max-h-[260px] space-y-1 overflow-y-auto">
+            {services.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-slate-400">
+                Hizmet bulunamadı.
+              </p>
+            ) : (
+              services.map((service) => {
+                const selected = serviceIds.includes(service.id);
+
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => toggleService(service.id)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                      selected ? 'bg-blue-50' : 'hover:bg-slate-50'
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-slate-900">
+                        {service.name}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-400">
+                        {service.duration} dk
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-700">
+                        {formatPrice(service.price)}
+                      </span>
+                      <span
+                        className={cn(
+                          'flex h-4 w-4 items-center justify-center rounded border',
+                          selected
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-slate-300 bg-white'
+                        )}
+                      >
+                        {selected && <Check className="h-3 w-3" />}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-1 pt-2">
+            <span className="text-[11px] text-slate-400">
+              {selectedServices.length} seçili
+            </span>
+            <div className="flex items-center gap-2">
+              {selectedServices.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setServiceIds([])}
+                  className="text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-700"
+                >
+                  Temizle
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveField('barber')}
+                disabled={selectedServices.length === 0}
+                className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                Devam et
+              </button>
+            </div>
+          </div>
+        </PickerField>
+
+        <PickerField
+          field="barber"
+          label="Personel"
+          icon={UserRound}
+          value={selectedBarber?.name ?? ''}
+          placeholder="Personel seçin"
+          activeField={activeField}
+          setActiveField={setActiveField}
+          panelClassName="right-0 w-[260px] max-w-[calc(100vw-48px)]"
+        >
+          <p className="px-2 pb-2 pt-1 text-xs font-semibold text-slate-500">
+            Personel seç
+          </p>
+          <div className="space-y-1">
+            {barbers.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-slate-400">
+                Personel bulunamadı.
+              </p>
+            ) : (
+              barbers.map((barber) => {
+                const selected = barber.id === barberId;
+
+                return (
+                  <button
+                    key={barber.id}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => selectBarber(barber.id)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                      selected ? 'bg-blue-50' : 'hover:bg-slate-50'
+                    )}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+                      {getInitials(barber.name)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
+                      {barber.name}
+                    </span>
+                    {selected && <Check className="h-4 w-4 text-blue-600" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </PickerField>
+
+        <PickerField
+          field="date"
+          label="Tarih"
+          icon={CalendarDays}
+          value={dateStr ? format(parseISO(dateStr), 'd MMM', { locale: tr }) : ''}
+          placeholder="Tarih seçin"
+          activeField={activeField}
+          setActiveField={setActiveField}
+          panelClassName="left-0 w-[300px] max-w-[calc(100vw-48px)]"
+        >
+          <p className="px-2 pb-2 pt-1 text-xs font-semibold text-slate-500">
+            Tarih seç
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {availableDates.map((date) => {
+              const value = format(date, 'yyyy-MM-dd');
+              const selected = value === dateStr;
+              const today = isSameDay(date, new Date());
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => selectDate(value)}
+                  className={cn(
+                    'flex flex-col items-center rounded-lg border px-2 py-2.5 transition-colors',
+                    selected
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : today
+                        ? 'border-blue-200 bg-blue-50 text-slate-900 hover:border-blue-300'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'text-[9px] font-semibold uppercase tracking-[0.08em]',
+                      selected ? 'text-blue-100' : 'text-slate-400'
+                    )}
+                  >
+                    {format(date, 'EEE', { locale: tr })}
+                  </span>
+                  <span className="mt-0.5 text-lg font-bold leading-none">
+                    {format(date, 'd')}
+                  </span>
+                  <span
+                    className={cn(
+                      'mt-0.5 text-[9px] font-medium uppercase',
+                      selected ? 'text-blue-100' : 'text-slate-400'
+                    )}
+                  >
+                    {format(date, 'MMM', { locale: tr })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </PickerField>
+
+        <PickerField
+          field="time"
+          label="Saat"
+          icon={Clock3}
+          value={time}
+          placeholder={
+            selectedServices.length === 0 || !selectedBarber || !dateStr
+              ? 'Önce diğer alanları seçin'
+              : 'Saat seçin'
+          }
+          activeField={activeField}
+          setActiveField={setActiveField}
+          disabled={selectedServices.length === 0 || !selectedBarber || !dateStr}
+          panelClassName="right-0 w-[280px] max-w-[calc(100vw-48px)]"
+        >
+          <div className="flex items-center justify-between px-2 pb-2 pt-1">
+            <p className="text-xs font-semibold text-slate-500">Saat seç</p>
+            {!fetchingTimes && (
+              <span className="text-[10px] text-slate-400">
+                {availableTimes.length} müsait
+              </span>
+            )}
+          </div>
+
+          {fetchingTimes ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            </div>
+          ) : availableTimes.length === 0 ? (
+            <p className="px-3 py-5 text-center text-xs text-slate-400">
+              Bu tarihte müsait saat yok.
+            </p>
+          ) : (
+            <div className="grid max-h-[240px] grid-cols-3 gap-2 overflow-y-auto">
+              {availableTimes.map((availableTime) => {
+                const selected = availableTime === time;
+
+                return (
+                  <button
+                    key={availableTime}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      setTime(availableTime);
+                      setActiveField(null);
+                    }}
+                    className={cn(
+                      'rounded-lg border py-2 text-center text-xs font-semibold transition-colors',
+                      selected
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                    )}
+                  >
+                    {availableTime}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </PickerField>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-slate-500">
+          {selectedServices.length > 0
+            ? `${formatPrice(totalPrice)} · ${totalDuration} dk`
+            : 'Randevu için seçim yapın'}
+        </p>
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 sm:w-auto"
+        >
+          Randevu Al
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+    </form>
   );
 };

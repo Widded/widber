@@ -35,8 +35,8 @@ const CalendarView = () => {
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-normal tracking-tight text-ink sm:text-3xl">Haftalık Takvim</h1>
-          <p className="mt-1 text-sm text-ink/50 sm:text-base">Randevuları haftalık görünümde inceleyin.</p>
+          <h1 className="font-bold text-2xl font-normal tracking-tight text-slate-900 sm:text-3xl">Haftalık Takvim</h1>
+          <p className="mt-1 text-sm text-slate-900/50 sm:text-base">Randevuları haftalık görünümde inceleyin.</p>
         </div>
         <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto bg-white border border-border/60 shadow-sm rounded-xl p-1.5">
           <Button variant="ghost" className="rounded-lg h-10 px-2 sm:px-3 hover:bg-secondary/50" onClick={prevWeek}>
@@ -59,9 +59,9 @@ const CalendarView = () => {
                 <span className="text-sm font-medium text-muted-foreground">Saat</span>
               </div>
               {weekDays.map((day, i) => (
-                <div key={i} className={`p-4 text-center border-r last:border-r-0 bg-white ${isSameDay(day, new Date()) ? 'bg-brass/5' : ''}`}>
+                <div key={i} className={`p-4 text-center border-r last:border-r-0 bg-white ${isSameDay(day, new Date()) ? 'bg-blue-600/5' : ''}`}>
                   <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{format(day, 'EEEE', { locale: tr })}</div>
-                  <div className={`text-2xl mt-1.5 font-bold ${isSameDay(day, new Date()) ? 'text-brass-dark' : 'text-foreground'}`}>
+                  <div className={`text-2xl mt-1.5 font-bold ${isSameDay(day, new Date()) ? 'text-blue-600' : 'text-foreground'}`}>
                     {format(day, 'd')}
                   </div>
                 </div>
@@ -70,7 +70,7 @@ const CalendarView = () => {
             
             {appointmentsLoading ? (
               <div className="flex items-center justify-center h-[500px]">
-                <Loader2 className="w-8 h-8 animate-spin text-brass-dark" />
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
               </div>
             ) : (
               <div className="flex flex-col">
@@ -87,15 +87,14 @@ const CalendarView = () => {
                   );
 
                   return (
-                    <div key={dayIdx} className={`p-1.5 border-r last:border-r-0 flex flex-col gap-1.5 min-h-[100px] transition-colors ${isSameDay(day, new Date()) ? 'bg-brass/5' : 'hover:bg-secondary/10'}`}>
+                    <div key={dayIdx} className={`p-1.5 border-r last:border-r-0 flex flex-col gap-1.5 min-h-[100px] transition-colors ${isSameDay(day, new Date()) ? 'bg-blue-600/5' : 'hover:bg-secondary/10'}`}>
                       {slotAppointments.map(appointment => {
                         const serviceNames = appointment.appointment_services?.map(as => as.services?.name).join(', ') || 'Bilinmiyor';
                         const barberName = appointment.barbers?.name || 'Bilinmiyor';
                         
                         return (
                           <div key={appointment.id} className={`p-2.5 rounded-xl text-xs border shadow-sm transition-all hover:shadow-md cursor-pointer ${
-                            appointment.status === 'pending' ? 'bg-yellow-50/80 border-yellow-200 text-yellow-800' :
-                            appointment.status === 'approved' ? 'bg-green-50/80 border-green-200 text-green-800' :
+                            appointment.status === 'pending' || appointment.status === 'approved' ? 'bg-green-50/80 border-green-200 text-green-800' :
                             appointment.status === 'completed' ? 'bg-blue-50/80 border-blue-200 text-blue-800' :
                             'bg-red-50/80 border-red-200 text-red-800'
                           }`}>

@@ -33,23 +33,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let active = true;
+
+    const hydrate = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!active) return;
+
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      checkStaffBarber(currentUser);
-      setLoading(false);
-    });
+
+      try {
+        await checkStaffBarber(currentUser);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void hydrate();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+
+      // İlk oturum yüklemesini yukarıdaki getSession akışı tamamlar.
+      if (event === 'INITIAL_SESSION') return;
+
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      checkStaffBarber(currentUser);
-      setLoading(false);
+
+      if (event === 'SIGNED_OUT') {
+        setStaffBarber(null);
+        setLoading(false);
+        return;
+      }
+
+      checkStaffBarber(currentUser).finally(() => {
+        if (active) setLoading(false);
+      });
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

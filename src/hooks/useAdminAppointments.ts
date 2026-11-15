@@ -13,9 +13,13 @@ export type AdminAppointment = {
   total_price: number;
   total_duration: number;
   barber_id: string | null;
+  customer_id?: string | null;
+  cancel_reason?: string | null;
+  no_show?: boolean | null;
+  is_demo?: boolean | null;
   barbers?: { name: string };
   appointment_services?: {
-    services?: { name: string };
+    services?: { name: string; category?: string | null };
   }[];
 };
 
@@ -23,13 +27,20 @@ export const useAdminAppointments = () => {
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading, user } = useAuth();
 
   const fetchAppointments = useCallback(async () => {
+    if (authLoading) return;
+
     setLoading(true);
     setError(null);
 
     try {
+      if (!user) {
+        setAppointments([]);
+        return;
+      }
+
       let query = supabase
         .from('appointments')
         .select(`
@@ -65,23 +76,44 @@ export const useAdminAppointments = () => {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [authLoading, isAdmin, user]);
 
   useEffect(() => {
-    void fetchAppointments();
-  }, [fetchAppointments]);
+    if (!authLoading) {
+      void fetchAppointments();
+    }
+  }, [authLoading, fetchAppointments]);
 
-  const updateStatus = async (id: string, newStatus: string): Promise<boolean> => {
+  const updateStatus = async (
+    id: string,
+    newStatus: string,
+    extra?: { cancel_reason?: string | null; no_show?: boolean }
+  ): Promise<boolean> => {
     try {
+      const update = { status: newStatus, ...extra };
+      let applied = update;
+
       const { error: updateError } = await supabase
         .from('appointments')
-        .update({ status: newStatus })
+        .update(update)
         .eq('id', id);
 
-      if (updateError) throw updateError;
+      if (updateError && extra) {
+        // Eski şemada cancel_reason/no_show yoksa sadece durumu güncelle.
+        const { error: fallbackError } = await supabase
+          .from('appointments')
+          .update({ status: newStatus })
+          .eq('id', id);
+
+        if (fallbackError) throw fallbackError;
+        applied = { status: newStatus };
+      } else if (updateError) {
+        throw updateError;
+      }
+
       setAppointments((prev) =>
         prev.map((appointment) =>
-          appointment.id === id ? { ...appointment, status: newStatus } : appointment
+          appointment.id === id ? { ...appointment, ...applied } : appointment
         )
       );
       return true;
