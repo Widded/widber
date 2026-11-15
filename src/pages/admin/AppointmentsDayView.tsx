@@ -755,10 +755,10 @@ const AppointmentsDayView = () => {
             <CalendarDays className="h-5 w-5" aria-hidden="true" />
           </span>
           <h2 className="mt-3 text-sm font-semibold text-slate-900">
-            Bu tarihte randevu yok
+            Bu gün için randevu yok
           </h2>
           <p className="mt-1 text-sm text-slate-400">
-            Başka bir gün seçebilir veya ilk uygun güne dönebilirsin.
+            Yeni bir randevu ekleyebilir veya başka bir güne geçebilirsin.
           </p>
 
           {nextAppointment && (
@@ -785,6 +785,14 @@ const AppointmentsDayView = () => {
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               type="button"
+              onClick={() => setIsManualOpen(true)}
+              className={primaryButton}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Yeni randevu
+            </button>
+            <button
+              type="button"
               onClick={() => goToDate(addDays(selectedDate, -1))}
               className={secondaryButton}
             >
@@ -794,6 +802,7 @@ const AppointmentsDayView = () => {
             <button
               type="button"
               onClick={() => goToDate(addDays(selectedDate, 1))}
+              disabled={isLastBookingDate}
               className={secondaryButton}
             >
               Sonraki gün
@@ -802,7 +811,7 @@ const AppointmentsDayView = () => {
             <button
               type="button"
               onClick={() => goToDate(firstBookingDate)}
-              className={primaryButton}
+              className={secondaryButton}
             >
               {todayIsClosed ? 'İlk uygun gün' : 'Bugün'}
             </button>
