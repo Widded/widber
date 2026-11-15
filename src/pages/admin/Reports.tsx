@@ -900,6 +900,15 @@ const Reports = () => {
               icon={CalendarDays}
               title="Yaklaşan randevu yok"
               text="Yeni randevular oluştuğunda burada listelenecek."
+              action={
+                <Link
+                  to="/admin/appointments"
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                >
+                  Randevulara git
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </Link>
+              }
             />
           ) : (
             <>

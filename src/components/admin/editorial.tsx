@@ -77,10 +77,17 @@ type EmptyPanelProps = {
   icon: React.ElementType;
   title: string;
   text: string;
+  action?: React.ReactNode;
   className?: string;
 };
 
-export const EmptyPanel = ({ icon: Icon, title, text, className }: EmptyPanelProps) => (
+export const EmptyPanel = ({
+  icon: Icon,
+  title,
+  text,
+  action,
+  className,
+}: EmptyPanelProps) => (
   <div
     className={cn(
       'flex min-h-[200px] flex-col items-center justify-center text-center',
@@ -92,6 +99,7 @@ export const EmptyPanel = ({ icon: Icon, title, text, className }: EmptyPanelPro
     </span>
     <p className="mt-3 text-sm font-medium text-slate-600">{title}</p>
     <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-slate-400">{text}</p>
+    {action && <div className="mt-3">{action}</div>}
   </div>
 );
 

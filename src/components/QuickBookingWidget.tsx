@@ -8,6 +8,7 @@ import {
   Loader2,
   Scissors,
   UserRound,
+  X,
 } from 'lucide-react';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -46,6 +47,25 @@ type PickerFieldProps = {
   children: React.ReactNode;
 };
 
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 639px)').matches
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 639px)');
+    const handleChange = () => setIsMobile(query.matches);
+
+    handleChange();
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
+  }, []);
+
+  return isMobile;
+};
+
 const PickerField = ({
   field,
   label,
@@ -59,6 +79,18 @@ const PickerField = ({
   children,
 }: PickerFieldProps) => {
   const open = activeField === field;
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (!open || !isMobile) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, isMobile]);
 
   return (
     <div className="relative">
@@ -99,7 +131,36 @@ const PickerField = ({
         />
       </button>
 
-      {open && (
+      {open && isMobile && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end bg-slate-900/40 backdrop-blur-[2px]"
+          onClick={() => setActiveField(null)}
+          role="presentation"
+        >
+          <div
+            role="listbox"
+            aria-label={label}
+            onClick={(event) => event.stopPropagation()}
+            className="max-h-[82vh] w-full overflow-y-auto rounded-t-2xl border-t border-slate-200 bg-white p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl"
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" aria-hidden="true" />
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">{label}</p>
+              <button
+                type="button"
+                onClick={() => setActiveField(null)}
+                aria-label="Paneli kapat"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            {children}
+          </div>
+        </div>
+      )}
+
+      {open && !isMobile && (
         <div
           role="listbox"
           className={cn(

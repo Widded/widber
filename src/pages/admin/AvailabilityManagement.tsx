@@ -685,6 +685,15 @@ const AvailabilityManagement = () => {
                     icon={Clock3}
                     title="Önce mesai saatleri gerekli"
                     text="Özel izin tanımlamak için önce Kalıcı saatler sekmesinden çalışma saatlerini belirle."
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('permanent')}
+                        className={secondaryButton}
+                      >
+                        Kalıcı saatlere dön
+                      </button>
+                    }
                   />
                 ) : (
                   <div className="mt-5 space-y-6">
@@ -777,7 +786,7 @@ const AvailabilityManagement = () => {
       </div>
 
       {hasChanges && (
-        <div className="fixed inset-x-4 bottom-4 z-40 md:hidden">
+        <div className="fixed inset-x-4 bottom-24 z-40 md:hidden">
           <button
             type="button"
             onClick={

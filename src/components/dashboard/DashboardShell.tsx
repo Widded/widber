@@ -51,6 +51,17 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
   };
 
+  const primaryPaths = [homePath, '/admin/appointments', '/admin/reports', '/admin/availability'];
+  const primaryItems = primaryPaths
+    .map((path) => items.find((item) => item.path === path))
+    .filter((item): item is DashboardNavItem => Boolean(item));
+
+  items.forEach((item) => {
+    if (primaryItems.length < 4 && !primaryItems.some((primary) => primary.path === item.path)) {
+      primaryItems.push(item);
+    }
+  });
+
   const handleLogout = async () => {
     await signOut();
     navigate('/admin/login');
@@ -182,15 +193,6 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
         {renderSidebar()}
       </aside>
 
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        aria-label="Menüyü aç"
-        className="fixed left-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm lg:hidden"
-      >
-        <Menu className="h-5 w-5" aria-hidden="true" />
-      </button>
-
       <div
         onClick={() => setMobileOpen(false)}
         aria-hidden="true"
@@ -211,7 +213,48 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
         {renderSidebar(true)}
       </aside>
 
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1 pb-24 lg:pb-0">{children}</main>
+
+      <nav
+        aria-label="Alt menü"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden"
+      >
+        <div className="mx-auto flex max-w-md items-stretch px-1 pb-[env(safe-area-inset-bottom)]">
+          {primaryItems.map((item) => {
+            const active = isActive(item.path);
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-semibold transition-colors',
+                  active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-700'
+                )}
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className={cn(
+              'flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-semibold transition-colors',
+              primaryItems.some((item) => isActive(item.path))
+                ? 'text-slate-400 hover:text-slate-700'
+                : 'text-blue-600'
+            )}
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+            <span>Menü</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 };

@@ -137,6 +137,7 @@ const AppointmentsDayView = () => {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayIsClosed = getDay(new Date()) === 0;
   const selectedIsInBookingRange = bookingDates.some((day) => isSameDay(day, selectedDate));
+  const todayInBookingRange = bookingDates.some((day) => isSameDay(day, new Date()));
   const isLastBookingDate = dateStr >= lastBookingDateStr;
 
   const filteredAppointments = useMemo(
@@ -725,10 +726,10 @@ const AppointmentsDayView = () => {
             </p>
             <button
               type="button"
-              onClick={() => goToDate(new Date())}
+              onClick={() => goToDate(todayInBookingRange ? new Date() : firstBookingDate)}
               className="text-[11px] font-semibold text-blue-700 underline-offset-2 hover:underline"
             >
-              Bugüne dön
+              {todayInBookingRange ? 'Bugüne dön' : 'İlk uygun güne dön'}
             </button>
           </div>
         )}
@@ -807,13 +808,6 @@ const AppointmentsDayView = () => {
             >
               Sonraki gün
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => goToDate(firstBookingDate)}
-              className={secondaryButton}
-            >
-              {todayIsClosed ? 'İlk uygun gün' : 'Bugün'}
             </button>
           </div>
         </section>
@@ -999,6 +993,13 @@ const AppointmentsDayView = () => {
           </aside>
         </div>
       )}
+
+      <ManualAppointmentModal
+        isOpen={isManualOpen}
+        onClose={() => setIsManualOpen(false)}
+        onCreated={handleManualCreated}
+        initialDate={dateStr}
+      />
     </div>
   );
 };

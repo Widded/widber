@@ -404,6 +404,12 @@ export const ManualAppointmentModal = ({
           )}
         </div>
 
+        {error && (
+          <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+            {error}
+          </p>
+        )}
+
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Toplam</p>
@@ -434,12 +440,6 @@ export const ManualAppointmentModal = ({
             </button>
           </div>
         </div>
-
-        {error && (
-          <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-            {error}
-          </p>
-        )}
       </form>
     </Modal>
   );

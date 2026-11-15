@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
@@ -30,6 +30,8 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
   // Common state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const staffFormRef = useRef<HTMLFormElement>(null);
+  const lastAutoSubmittedRef = useRef('');
   const navigate = useNavigate();
 
   const fetchBarbers = useCallback(async () => {
@@ -57,6 +59,16 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
       void fetchBarbers();
     }
   }, [loginMode, fetchBarbers]);
+
+  useEffect(() => {
+    if (pin.length !== 6 || !selectedBarber || loading) return;
+
+    const key = `${selectedBarber}:${pin}`;
+    if (lastAutoSubmittedRef.current === key) return;
+
+    lastAutoSubmittedRef.current = key;
+    staffFormRef.current?.requestSubmit();
+  }, [pin, selectedBarber, loading]);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,7 +231,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleStaffLogin} className="space-y-5">
+            <form ref={staffFormRef} onSubmit={handleStaffLogin} className="space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="barber" className="text-xs font-semibold text-slate-900/60">
@@ -244,7 +256,12 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                   <select
                     id="barber"
                     value={selectedBarber}
-                    onChange={(e) => setSelectedBarber(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedBarber(e.target.value);
+                      setPin('');
+                      lastAutoSubmittedRef.current = '';
+                      setError(null);
+                    }}
                     disabled={barbersLoading}
                     className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3.5 pr-10 text-[15px] font-medium text-slate-900 outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60"
                     required
@@ -287,7 +304,7 @@ const Login = ({ mode = 'staff' }: LoginProps) => {
                     className="h-14 rounded-xl border-slate-200 bg-white pl-11 pr-12 text-center font-mono text-2xl tracking-[0.4em] focus-visible:ring-blue-500"
                     value={pin}
                     onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                    autoComplete="off"
+                    autoComplete="one-time-code"
                     required
                   />
                   <button

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
+import { endOfMonth, format, isSameDay, parseISO, startOfMonth, addDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import {
   CalendarDays,
@@ -51,6 +51,19 @@ const DashboardOverview = () => {
   const todayAppointments = appointments
     .filter((appointment) => appointment.appointment_date === todayStr)
     .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time));
+  const nextAppointment = appointments
+    .filter(
+      (appointment) =>
+        appointment.status === 'approved' &&
+        (appointment.appointment_date > todayStr ||
+          (appointment.appointment_date === todayStr &&
+            appointment.appointment_time.slice(0, 5) >= format(now, 'HH:mm')))
+    )
+    .sort((a, b) =>
+      `${a.appointment_date} ${a.appointment_time}`.localeCompare(
+        `${b.appointment_date} ${b.appointment_time}`
+      )
+    )[0] ?? null;
   const activeTodayAppointments = todayAppointments.filter(
     (appointment) =>
       appointment.status !== 'cancelled' && appointment.status !== 'rejected'
@@ -92,7 +105,7 @@ const DashboardOverview = () => {
 
   if (loading && appointments.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 pt-16 md:px-6 lg:px-8 lg:pt-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 pt-5 sm:pt-6 md:px-6 lg:px-8 lg:pt-8">
         <div className="space-y-5">
           <div className="h-16 w-64 animate-pulse rounded-xl bg-white" />
           <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -110,7 +123,7 @@ const DashboardOverview = () => {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 pt-16 md:px-6 lg:px-8 lg:pt-8">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 pt-5 sm:pt-6 md:px-6 lg:px-8 lg:pt-8">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -149,6 +162,52 @@ const DashboardOverview = () => {
           <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
           </div>
+        )}
+
+        {nextAppointment && (
+          <Link
+            to={`/admin/appointments/${nextAppointment.appointment_date}`}
+            className="group flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-white p-4 shadow-sm transition-colors hover:border-blue-200"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+              <Clock3 className="h-5 w-5" aria-hidden="true" />
+            </span>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-600">
+                Sıradaki randevu
+              </p>
+              <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
+                {nextAppointment.customer_first_name} {nextAppointment.customer_last_name}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">
+                {getServiceNames(nextAppointment)}
+                {isAdmin && nextAppointment.barbers?.name
+                  ? ` · ${nextAppointment.barbers.name}`
+                  : ''}
+              </p>
+            </div>
+
+            <div className="shrink-0 text-right">
+              <p className="text-base font-bold text-slate-900">
+                {formatTime(nextAppointment.appointment_time)}
+              </p>
+              <p className="text-[10px] font-medium text-blue-600">
+                {isSameDay(parseISO(nextAppointment.appointment_date), now)
+                  ? 'Bugün'
+                  : isSameDay(parseISO(nextAppointment.appointment_date), addDays(now, 1))
+                    ? 'Yarın'
+                    : format(parseISO(nextAppointment.appointment_date), 'd MMM', {
+                        locale: tr,
+                      })}
+              </p>
+            </div>
+
+            <ChevronRight
+              className="h-4 w-4 shrink-0 text-blue-300 transition-colors group-hover:text-blue-600"
+              aria-hidden="true"
+            />
+          </Link>
         )}
 
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -201,8 +260,15 @@ const DashboardOverview = () => {
               </span>
               <p className="mt-3 text-sm font-medium text-slate-600">Randevu yok</p>
               <p className="mt-1 text-xs text-slate-400">
-                Yaklaşan randevular oluştuğunda burada görünecek.
+                İlk randevuyu oluşturmak için randevular sayfasına git.
               </p>
+              <Link
+                to="/admin/appointments"
+                className="mt-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                Randevulara git
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
             </div>
           ) : (
             <div className="divide-y divide-slate-100 p-2">

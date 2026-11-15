@@ -12,7 +12,7 @@ const RoleLayout = () => {
       items={isAdmin ? ownerNavItems : staffNavItems}
       homePath={isAdmin ? '/admin/dashboard' : '/admin/staff'}
     >
-      <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-16 md:px-6 lg:px-8 lg:pt-8">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-10 pt-5 md:px-6 lg:px-8 lg:pt-8">
         <Outlet />
       </div>
     </DashboardShell>
