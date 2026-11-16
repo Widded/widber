@@ -27,6 +27,7 @@ import {
 } from '../../components/admin/editorial';
 import { getBookingDates, getFirstBookingDate } from '../../lib/bookingDates';
 import { invalidatePublicDataCache } from '../../hooks/useSupabaseData';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
 interface BlockedTime {
   id: string;
@@ -60,7 +61,14 @@ const AvailabilityManagement = () => {
   const [loading, setLoading] = useState(false);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [localBlockedTimes, setLocalBlockedTimes] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(() => getFirstBookingDate());
+  const { settings } = useSiteSettings();
+  const [selectedDate, setSelectedDate] = useState<Date>(() =>
+    getFirstBookingDate({
+      booking_window_days: settings.booking_window_days,
+      closed_weekdays: settings.closed_weekdays,
+      same_day_booking: settings.same_day_booking,
+    })
+  );
   const [permanentHours, setPermanentHours] = useState<string[]>([]);
   const [slotInterval, setSlotInterval] = useState<number>(30);
   const [hasChanges, setHasChanges] = useState(false);
@@ -98,13 +106,29 @@ const AvailabilityManagement = () => {
   const permanentGroups = groupSlots(allTimeSlots);
   const exceptionGroups = groupSlots(permanentHours);
 
-  const availableDates = useMemo(() => getBookingDates(), []);
+  const availableDates = useMemo(
+    () =>
+      getBookingDates({
+        booking_window_days: settings.booking_window_days,
+        closed_weekdays: settings.closed_weekdays,
+        same_day_booking: settings.same_day_booking,
+      }),
+    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+  );
 
   useEffect(() => {
     if (isAdmin && barbers.length > 0 && !selectedBarberId) {
       setSelectedBarberId(barbers[0].id);
     }
   }, [isAdmin, barbers, selectedBarberId]);
+
+  useEffect(() => {
+    if (availableDates.length === 0) return;
+
+    if (!availableDates.some((day) => isSameDay(day, selectedDate))) {
+      setSelectedDate(availableDates[0]);
+    }
+  }, [availableDates, selectedDate]);
 
   useEffect(() => {
     void fetchPermanentHours();

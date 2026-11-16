@@ -41,6 +41,11 @@ const prefetchAdminRoute = (path: string) => {
 
   if (path === '/admin/barbers') {
     void import('../../pages/admin/BarbersManagement');
+    return;
+  }
+
+  if (path === '/admin/settings') {
+    void import('../../pages/admin/SiteSettings');
   }
 };
 

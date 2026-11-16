@@ -5,6 +5,7 @@ import { CalendarPlus, Check, Clock3, Loader2, Phone, Scissors, UserRound } from
 import { Modal } from '../ui/modal';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
 import { useAuth } from '../../context/AuthContext';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 import { useAvailableTimes } from '../../hooks/useAvailableTimes';
 import { splitTimeSlots } from '../../lib/availability';
 import { getBookingDates } from '../../lib/bookingDates';
@@ -30,8 +31,17 @@ export const ManualAppointmentModal = ({
   initialDate,
 }: ManualAppointmentModalProps) => {
   const { isAdmin, staffBarber } = useAuth();
+  const { settings } = useSiteSettings();
   const { services, barbers, loading: dataLoading } = useSupabaseData();
-  const availableDates = useMemo(() => getBookingDates(), []);
+  const availableDates = useMemo(
+    () =>
+      getBookingDates({
+        booking_window_days: settings.booking_window_days,
+        closed_weekdays: settings.closed_weekdays,
+        same_day_booking: settings.same_day_booking,
+      }),
+    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+  );
   const firstDateStr = availableDates[0]
     ? format(availableDates[0], 'yyyy-MM-dd')
     : format(new Date(), 'yyyy-MM-dd');
@@ -58,14 +68,14 @@ export const ManualAppointmentModal = ({
 
   const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(
     dateStr,
-    selectedBarber,
-    totalDuration
+    selectedBarber
   );
 
   const { available: availableTimes } = splitTimeSlots(
     selectedBarber?.working_hours ?? [],
     bookedTimes,
-    dateStr || null
+    dateStr || null,
+    settings.min_notice_minutes
   );
 
   useEffect(() => {
@@ -220,7 +230,7 @@ export const ManualAppointmentModal = ({
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Toplam</p>
               <p className="text-sm font-semibold text-slate-900">
-                {formatPrice(totalPrice)} · {totalDuration} dk
+                {formatPrice(totalPrice)}
               </p>
             </div>
 
@@ -306,7 +316,7 @@ export const ManualAppointmentModal = ({
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-slate-600">Hizmetler</p>
             <span className="text-[10px] text-slate-400">
-              {selectedServices.length} seçili · {totalDuration} dk
+              {selectedServices.length} seçili
             </span>
           </div>
 
@@ -335,9 +345,6 @@ export const ManualAppointmentModal = ({
                       <span className="min-w-0">
                         <span className="block truncate text-xs font-medium text-slate-900">
                           {service.name}
-                        </span>
-                        <span className="block text-[10px] text-slate-400">
-                          {service.duration} dk
                         </span>
                       </span>
                     </span>

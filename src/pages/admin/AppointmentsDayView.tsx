@@ -33,6 +33,7 @@ import {
 } from '../../lib/appointmentUtils';
 import { cn } from '../../lib/utils';
 import { getBookingDates } from '../../lib/bookingDates';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 import {
   PageHeader,
   WarmStatusBadge,
@@ -70,17 +71,6 @@ const formatPhone = (phone: string) => {
   return phone;
 };
 
-const toMinutes = (time: string) => {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + (minutes || 0);
-};
-
-const formatMinutes = (totalMinutes: number) => {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-};
-
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900';
 
@@ -91,6 +81,7 @@ const AppointmentsDayView = () => {
   const { date } = useParams<{ date: string }>();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
+  const { settings } = useSiteSettings();
   const { showToast } = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -132,12 +123,21 @@ const AppointmentsDayView = () => {
   }, [date]);
 
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
-  const bookingDates = useMemo(() => getBookingDates(), []);
+  const bookingDates = useMemo(
+    () =>
+      getBookingDates({
+        booking_window_days: settings.booking_window_days,
+        closed_weekdays: settings.closed_weekdays,
+        same_day_booking: settings.same_day_booking,
+      }),
+    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+  );
   const firstBookingDate = bookingDates[0] ?? new Date();
   const lastBookingDate = bookingDates[bookingDates.length - 1] ?? new Date();
   const lastBookingDateStr = format(lastBookingDate, 'yyyy-MM-dd');
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const todayIsClosed = getDay(new Date()) === 0;
+  const todayIsClosed =
+    settings.closed_weekdays.includes(getDay(new Date())) || !settings.same_day_booking;
   const selectedIsInBookingRange = bookingDates.some((day) => isSameDay(day, selectedDate));
   const todayInBookingRange = bookingDates.some((day) => isSameDay(day, new Date()));
   const isLastBookingDate = dateStr >= lastBookingDateStr;
@@ -207,23 +207,9 @@ const AppointmentsDayView = () => {
     (sum, appointment) => sum + Number(appointment.total_price || 0),
     0
   );
-  const totalDuration = activeAppointments.reduce(
-    (sum, appointment) => sum + Number(appointment.total_duration || 0),
-    0
-  );
-  const occupancy = Math.min(100, Math.round((totalDuration / 720) * 100));
   const firstTime = activeAppointments.length
     ? formatTime(activeAppointments[0].appointment_time)
     : '--:--';
-  const lastEndMinutes = activeAppointments.reduce(
-    (max, appointment) =>
-      Math.max(
-        max,
-        toMinutes(appointment.appointment_time) + Number(appointment.total_duration || 0)
-      ),
-    0
-  );
-  const lastEndTime = activeAppointments.length ? formatMinutes(lastEndMinutes) : '--:--';
 
   const barberCounts = filteredAppointments.reduce<Record<string, number>>(
     (acc, appointment) => {
@@ -412,7 +398,6 @@ const AppointmentsDayView = () => {
           <p className="text-sm font-semibold text-slate-900">
             {formatTime(appointment.appointment_time)}
           </p>
-          <p className="text-[10px] text-slate-400">{appointment.total_duration} dk</p>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -944,25 +929,9 @@ const AppointmentsDayView = () => {
                       ))}
                   </div>
 
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-slate-500">Doluluk</p>
-                      <span className="text-xs font-semibold text-slate-900">
-                        %{occupancy}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-blue-600 transition-all"
-                        style={{ width: `${occupancy}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>
-                        {firstTime} – {lastEndTime}
-                      </span>
-                      <span>{totalDuration} dk planlı</span>
-                    </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-xs">
+                    <span className="font-medium text-slate-500">İlk randevu</span>
+                    <span className="font-semibold text-slate-900">{firstTime}</span>
                   </div>
                 </>
               )}

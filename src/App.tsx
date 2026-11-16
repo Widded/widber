@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { getFirstBookingDate } from './lib/bookingDates';
+import { useSiteSettings } from './hooks/useSiteSettings';
 import { BookingProvider } from './context/BookingContext';
 import Home from './pages/client/Home';
 import Layout from './components/layout/Layout';
@@ -20,6 +21,7 @@ const BarbersManagement = lazy(() => import('./pages/admin/BarbersManagement'));
 const AvailabilityManagement = lazy(() => import('./pages/admin/AvailabilityManagement'));
 const Login = lazy(() => import('./pages/admin/Login'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
+const SiteSettings = lazy(() => import('./pages/admin/SiteSettings'));
 const OwnerDashboard = lazy(() => import('./pages/admin/OwnerDashboard'));
 const StaffDashboard = lazy(() => import('./pages/admin/StaffDashboard'));
 
@@ -39,7 +41,15 @@ const AdminIndexRedirect = () => {
 };
 
 const AppointmentsIndexRedirect = () => {
-  const firstDate = getFirstBookingDate();
+  const { settings, loading } = useSiteSettings();
+
+  if (loading) return <PageLoading />;
+
+  const firstDate = getFirstBookingDate({
+    booking_window_days: settings.booking_window_days,
+    closed_weekdays: settings.closed_weekdays,
+    same_day_booking: settings.same_day_booking,
+  });
 
   return (
     <Navigate to={`/admin/appointments/${format(firstDate, 'yyyy-MM-dd')}`} replace />
@@ -109,6 +119,7 @@ function App() {
                 <Route element={<OwnerOnlyRoute />}>
                   <Route path="services" element={<ServicesManagement />} />
                   <Route path="barbers" element={<BarbersManagement />} />
+                  <Route path="settings" element={<SiteSettings />} />
                 </Route>
               </Route>
             </Route>

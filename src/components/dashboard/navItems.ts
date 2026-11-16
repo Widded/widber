@@ -4,6 +4,7 @@ import {
   LineChart,
   Scissors,
   Settings,
+  SlidersHorizontal,
   UserRound,
 } from 'lucide-react';
 import type { DashboardNavItem } from './DashboardShell';
@@ -15,6 +16,7 @@ export const ownerNavItems: DashboardNavItem[] = [
   { icon: Scissors, label: 'Hizmetler', path: '/admin/services' },
   { icon: LineChart, label: 'Analiz', path: '/admin/reports' },
   { icon: Settings, label: 'Müsaitlik', path: '/admin/availability' },
+  { icon: SlidersHorizontal, label: 'Site Ayarları', path: '/admin/settings' },
 ];
 
 export const staffNavItems: DashboardNavItem[] = [

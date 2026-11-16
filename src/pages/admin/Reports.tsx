@@ -457,7 +457,6 @@ const Reports = () => {
       'Gelmedi',
       'İptal Nedeni',
       'Tutar',
-      'Süre (dk)',
     ];
     const rows = periodAppointments.map((appointment) => [
       format(parseISO(appointment.appointment_date), 'dd.MM.yyyy'),
@@ -470,7 +469,6 @@ const Reports = () => {
       appointment.no_show ? 'Evet' : 'Hayır',
       appointment.cancel_reason || '',
       Number(appointment.total_price || 0).toString(),
-      String(appointment.total_duration || 0),
     ]);
 
     const csv =

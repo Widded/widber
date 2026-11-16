@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "db:indexes": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-performance-indexes.sql --yes",
     "db:conflicts": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-double-booking-fix.sql --yes",
+    "db:slot": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-slot-only-booking.sql --yes",
+    "db:settings": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-site-settings.sql --yes",
     "db:verify": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-verify.sql --read-only"
   },
   "dependencies": {

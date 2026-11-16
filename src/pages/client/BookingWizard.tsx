@@ -13,6 +13,7 @@ import { getBookingDates } from '../../lib/bookingDates';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 import { useAvailableTimes } from '../../hooks/useAvailableTimes';
 import { splitTimeSlots } from '../../lib/availability';
 import { supabase } from '../../lib/supabase';
@@ -29,6 +30,7 @@ const STEPS = [
 
 const BookingWizard = () => {
   const { services: SERVICES, barbers: BARBERS, loading } = useSupabaseData();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
   const { appointment, setServices, setBarber, setDateTime, setCustomerInfo, resetAppointment } = useBooking();
   const [currentStep, setCurrentStep] = useState(() => {
@@ -77,13 +79,14 @@ const BookingWizard = () => {
   const totalDuration = selectedServices.reduce((acc, curr) => acc + curr.duration, 0);
   const totalPrice = selectedServices.reduce((acc, curr) => acc + curr.price, 0);
 
-  const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(selectedDate, selectedBarber, totalDuration);
+  const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(selectedDate, selectedBarber);
 
   const workingHours = selectedBarber?.working_hours || [];
   const { available: availableTimes, full: fullTimes } = splitTimeSlots(
     workingHours,
     bookedTimes,
-    selectedDate
+    selectedDate,
+    settings.min_notice_minutes
   );
 
   React.useEffect(() => {
@@ -104,7 +107,15 @@ const BookingWizard = () => {
   };
 
   // Generate dates: today + 7 days, Sundays excluded
-  const availableDates = React.useMemo(() => getBookingDates(), []);
+  const availableDates = React.useMemo(
+    () =>
+      getBookingDates({
+        booking_window_days: settings.booking_window_days,
+        closed_weekdays: settings.closed_weekdays,
+        same_day_booking: settings.same_day_booking,
+      }),
+    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+  );
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, ''); // Sadece rakamlar
@@ -240,6 +251,42 @@ const BookingWizard = () => {
     }
   };
 
+  if (settings.booking_paused) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16 text-center sm:py-24">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <h1 className="text-xl font-bold text-slate-900">
+            Randevu alımı geçici olarak durduruldu
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            Şu anda yeni randevu kabul edilmiyor. Lütfen daha sonra tekrar deneyin
+            veya bizimle iletişime geçin.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {settings.phone && (
+              <a
+                href={`tel:${settings.phone}`}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Telefonla ara
+              </a>
+            )}
+            {settings.whatsapp && (
+              <a
+                href={`https://wa.me/${settings.whatsapp.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                WhatsApp
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 sm:py-12">
       <div className="max-w-3xl mx-auto">
@@ -302,7 +349,6 @@ const BookingWizard = () => {
                           >
                             <div className="min-w-0">
                               <h3 className="text-base font-semibold leading-snug text-slate-900">{service.name}</h3>
-                              <p className="mt-1 text-xs font-medium text-slate-500">{service.duration} dk</p>
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-1.5">
                               <span className="text-sm font-bold text-slate-900">₺{service.price}</span>
@@ -601,7 +647,7 @@ const BookingWizard = () => {
                         <div className="space-y-2">
                           {selectedServices.map(s => (
                             <div key={s.id} className="flex justify-between text-sm font-medium">
-                              <span>{s.name} <span className="text-muted-foreground ml-1">({s.duration} dk)</span></span>
+                              <span>{s.name}</span>
                               <span>₺{s.price}</span>
                             </div>
                           ))}
@@ -610,7 +656,6 @@ const BookingWizard = () => {
                           <span>Toplam</span>
                           <span className="text-slate-900">₺{totalPrice}</span>
                         </div>
-                        <p className="text-xs font-medium text-muted-foreground mt-1">Toplam Süre: {totalDuration} Dakika</p>
                       </div>
                     </div>
 
@@ -621,6 +666,17 @@ const BookingWizard = () => {
                         Sistem üzerinden herhangi bir ücret alınmamaktadır. Ödemenizi hizmet bitiminde dükkanda yapabilirsiniz.
                       </p>
                     </div>
+
+                    {settings.cancellation_policy && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                        <strong className="mb-1 block font-semibold text-slate-900">
+                          İptal Politikası
+                        </strong>
+                        <p className="whitespace-pre-line text-slate-600">
+                          {settings.cancellation_policy}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.div>

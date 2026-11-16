@@ -7,7 +7,6 @@ import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { Modal } from '../../components/ui/modal';
 import {
   Banknote,
-  Clock3,
   Edit2,
   Plus,
   Save,
@@ -28,7 +27,6 @@ const ServicesManagement = () => {
   // Form State
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [duration, setDuration] = useState('');
 
   // Modal State
   const [modalState, setModalState] = useState<{
@@ -73,7 +71,6 @@ const ServicesManagement = () => {
   const resetForm = () => {
     setName('');
     setPrice('');
-    setDuration('');
     setIsAdding(false);
     setEditingId(null);
   };
@@ -81,19 +78,20 @@ const ServicesManagement = () => {
   const handleEditClick = (service: Service) => {
     setName(service.name);
     setPrice(service.price.toString());
-    setDuration(service.duration.toString());
     setEditingId(service.id);
     setIsAdding(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !price || !duration) return;
+    if (!name || !price) return;
 
     const payload = {
       name,
       price: Number(price),
-      duration: parseInt(duration),
+      duration: editingId
+        ? Number(services.find((service) => service.id === editingId)?.duration ?? 30)
+        : 30,
     };
 
     try {
@@ -187,12 +185,6 @@ const ServicesManagement = () => {
     services.length > 0
       ? Math.round(services.reduce((sum, service) => sum + Number(service.price), 0) / services.length)
       : 0;
-  const averageDuration =
-    services.length > 0
-      ? Math.round(
-          services.reduce((sum, service) => sum + Number(service.duration), 0) / services.length
-        )
-      : 0;
 
   return (
     <div className="space-y-6">
@@ -205,7 +197,7 @@ const ServicesManagement = () => {
             Hizmetler
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Menüyü, fiyatları ve süreleri buradan yönetin.
+            Menüyü ve fiyatları buradan yönetin.
           </p>
         </div>
 
@@ -218,11 +210,10 @@ const ServicesManagement = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {[
           { icon: Scissors, label: 'Toplam hizmet', value: services.length },
           { icon: Banknote, label: 'Ortalama fiyat', value: `₺${averagePrice}` },
-          { icon: Clock3, label: 'Ortalama süre', value: `${averageDuration} dk` },
         ].map((item) => (
           <div
             key={item.label}
@@ -325,10 +316,6 @@ const ServicesManagement = () => {
                     ₺{Number(service.price).toLocaleString('tr-TR')}
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-600/[0.04] px-3 py-1.5 text-[10px] font-semibold text-slate-600">
-                  <Clock3 className="h-3 w-3" aria-hidden="true" />
-                  {service.duration} dk
-                </span>
               </div>
             </article>
           ))}
@@ -343,7 +330,7 @@ const ServicesManagement = () => {
         maxWidth="max-w-3xl"
       >
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name" className="text-xs font-semibold text-slate-600">
                 Hizmet Adı
@@ -369,21 +356,6 @@ const ServicesManagement = () => {
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="Örn: 350"
-                className="h-12 rounded-xl border-slate-200 bg-white focus-visible:ring-blue-500"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="duration" className="text-xs font-semibold text-slate-600">
-                Süre (Dakika)
-              </Label>
-              <Input
-                id="duration"
-                type="number"
-                min="1"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                placeholder="Örn: 45"
                 className="h-12 rounded-xl border-slate-200 bg-white focus-visible:ring-blue-500"
                 required
               />

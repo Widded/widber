@@ -18,9 +18,10 @@ where schemaname = 'public'
 
 union all
 
-select 'overlap_constraint' as kind, conname as name
-from pg_constraint
-where conrelid = 'public.appointments'::regclass
-  and conname = 'appointments_no_overlap'
+select 'slot_unique_index' as kind, indexname as name
+from pg_indexes
+where schemaname = 'public'
+  and tablename = 'appointments'
+  and indexname = 'appointments_unique_active_slot'
 
 order by kind, name;

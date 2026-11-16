@@ -13,6 +13,7 @@ import {
 import { format, isSameDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useSupabaseData } from '../hooks/useSupabaseData';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 import { useAvailableTimes } from '../hooks/useAvailableTimes';
 import { useBooking } from '../context/BookingContext';
 import { splitTimeSlots } from '../lib/availability';
@@ -177,6 +178,7 @@ const PickerField = ({
 
 export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComplete }) => {
   const { services, barbers, loading } = useSupabaseData();
+  const { settings } = useSiteSettings();
   const { setServices, setBarber, setDateTime } = useBooking();
   const widgetRef = useRef<HTMLFormElement>(null);
 
@@ -188,10 +190,6 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
   const selectedServices = services.filter((service) => serviceIds.includes(service.id));
   const selectedBarber = barbers.find((barber) => barber.id === barberId) ?? null;
-  const totalDuration = selectedServices.reduce(
-    (sum, service) => sum + service.duration,
-    0
-  );
   const totalPrice = selectedServices.reduce((sum, service) => sum + service.price, 0);
   const serviceLabel =
     selectedServices.length === 0
@@ -200,12 +198,19 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         ? selectedServices[0].name
         : `${selectedServices.length} hizmet`;
 
-  const availableDates = useMemo(() => getBookingDates(), []);
+  const availableDates = useMemo(
+    () =>
+      getBookingDates({
+        booking_window_days: settings.booking_window_days,
+        closed_weekdays: settings.closed_weekdays,
+        same_day_booking: settings.same_day_booking,
+      }),
+    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+  );
 
   const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(
     dateStr,
-    selectedBarber,
-    totalDuration
+    selectedBarber
   );
 
   useEffect(() => {
@@ -222,7 +227,8 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   const { available: availableTimes } = splitTimeSlots(
     selectedBarber?.working_hours ?? [],
     bookedTimes,
-    dateStr || null
+    dateStr || null,
+    settings.min_notice_minutes
   );
 
   const canSubmit =
@@ -355,9 +361,6 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-slate-900">
                         {service.name}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-slate-400">
-                        {service.duration} dk
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
@@ -580,7 +583,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
       <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-slate-500">
           {selectedServices.length > 0
-            ? `${formatPrice(totalPrice)} · ${totalDuration} dk`
+            ? formatPrice(totalPrice)
             : 'Randevu için seçim yapın'}
         </p>
 
