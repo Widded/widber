@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format, isSameDay, isTomorrow, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Check, Info, Loader2, X, Zap } from 'lucide-react';
+import { Check, Info, Loader2, Scissors, X, Zap } from 'lucide-react';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import { useAvailableTimes } from '../hooks/useAvailableTimes';
@@ -11,6 +11,7 @@ import { getBookingDates } from '../lib/bookingDates';
 import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
 import { findEarliestSlot } from '../lib/earliestSlot';
+import { Modal } from './ui/modal';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
@@ -60,6 +61,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   const [dateStr, setDateStr] = useState('');
   const [time, setTime] = useState('');
   const [isFindingSlot, setIsFindingSlot] = useState(false);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [findMessage, setFindMessage] = useState<string | null>(null);
 
   const selectedServices = services.filter((service) => serviceIds.includes(service.id));
@@ -203,8 +205,11 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
       setFindMessage('Saatler kontrol edilemedi, lütfen tekrar dene.');
     } finally {
       setIsFindingSlot(false);
+      setServiceModalOpen(false);
     }
   };
+
+  const openFindModal = () => setServiceModalOpen(true);
 
   const canSubmit = Boolean(
     selectedServices.length > 0 &&
@@ -224,6 +229,80 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     onComplete();
   };
 
+  const findModal = (
+    <Modal
+      isOpen={serviceModalOpen}
+      onClose={() => setServiceModalOpen(false)}
+      title="Hizmet seç"
+      icon={<Scissors className="h-5 w-5" aria-hidden="true" />}
+      footer={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setServiceModalOpen(false)}
+            className="inline-flex h-10 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleFindEarliest()}
+            disabled={serviceIds.length === 0 || isFindingSlot}
+            className="inline-flex h-10 flex-[1.5] items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            {isFindingSlot ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Zap className="h-4 w-4" aria-hidden="true" />
+            )}
+            En erken saati bul
+          </button>
+        </div>
+      }
+    >
+      <p className="text-xs leading-relaxed text-slate-500">
+        En erken saati bulmak için hizmetini seç. Birden fazla seçebilirsin.
+      </p>
+
+      <div className="mt-3 space-y-2">
+        {services.map((service) => {
+          const selected = serviceIds.includes(service.id);
+
+          return (
+            <button
+              key={service.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => toggleService(service.id)}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
+                selected
+                  ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600'
+                  : 'border-slate-200 hover:border-blue-200 hover:bg-slate-50'
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border',
+                  selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                )}
+                aria-hidden="true"
+              >
+                {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-800">
+                {service.name}
+              </span>
+              <span className="shrink-0 text-[13px] font-semibold text-slate-900">
+                {formatPrice(service.price)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+
   if (loading) {
     return (
       <div className="grid gap-4 lg:grid-cols-[1fr_316px]">
@@ -235,7 +314,8 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
   if (isMobile) {
     return (
-      <form onSubmit={handleSubmit} className="space-y-3">
+      <>
+        <form onSubmit={handleSubmit} className="space-y-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="space-y-4">
             <div>
@@ -374,7 +454,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
             <button
               type="button"
-              onClick={handleFindEarliest}
+              onClick={openFindModal}
               disabled={isFindingSlot}
               className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -435,12 +515,15 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
             Randevuyu onayla
           </button>
         </div>
-      </form>
+        </form>
+        {findModal}
+      </>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid w-full items-start gap-4 lg:grid-cols-[1fr_316px]">
+    <>
+      <form onSubmit={handleSubmit} className="grid w-full items-start gap-4 lg:grid-cols-[1fr_316px]">
       <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         {/* Hizmet */}
         <section className="border-b border-slate-100 pb-5" aria-labelledby="hizmet-baslik">
@@ -719,7 +802,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
           </button>
           <button
             type="button"
-            onClick={handleFindEarliest}
+            onClick={openFindModal}
             disabled={isFindingSlot}
             className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -757,6 +840,8 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
           Randevuyu onayla
         </button>
       </div>
-    </form>
+      </form>
+      {findModal}
+    </>
   );
 };
