@@ -745,9 +745,6 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
                     <span className="block truncate text-sm font-medium text-slate-900">
                       {service.name}
                     </span>
-                    <span className="text-[11px] text-slate-400">
-                      {service.duration} dk
-                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     <span className="text-xs font-semibold text-slate-700">
