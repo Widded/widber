@@ -17,7 +17,11 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useAdminAppointments, type AdminAppointment } from '../../hooks/useAdminAppointments';
+import {
+  clearAppointmentsCache,
+  useAdminAppointments,
+  type AdminAppointment,
+} from '../../hooks/useAdminAppointments';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/toast';
 import { ManualAppointmentModal } from '../../components/admin/ManualAppointmentModal';
@@ -86,8 +90,6 @@ const menuItemDangerClass =
 const AppointmentsDayView = () => {
   const { date } = useParams<{ date: string }>();
   const navigate = useNavigate();
-  const { appointments, loading, error, updateStatus, deleteAppointment, refresh } =
-    useAdminAppointments();
   const { isAdmin } = useAuth();
   const { showToast } = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -139,6 +141,16 @@ const AppointmentsDayView = () => {
   const selectedIsInBookingRange = bookingDates.some((day) => isSameDay(day, selectedDate));
   const todayInBookingRange = bookingDates.some((day) => isSameDay(day, new Date()));
   const isLastBookingDate = dateStr >= lastBookingDateStr;
+  const earliestDateStr = format(addDays(new Date(), -30), 'yyyy-MM-dd');
+  const isFirstDate = dateStr <= earliestDateStr;
+
+  const appointmentRange = useMemo(
+    () => ({ from: earliestDateStr, to: lastBookingDateStr }),
+    [earliestDateStr, lastBookingDateStr]
+  );
+
+  const { appointments, loading, error, updateStatus, deleteAppointment, refresh } =
+    useAdminAppointments(appointmentRange);
 
   const filteredAppointments = useMemo(
     () =>
@@ -377,6 +389,7 @@ const AppointmentsDayView = () => {
 
   const handleManualCreated = () => {
     setIsManualOpen(false);
+    clearAppointmentsCache();
     void refresh();
     showToast({ message: 'Randevu oluşturuldu.' });
   };
@@ -626,15 +639,16 @@ const AppointmentsDayView = () => {
               <button
                 type="button"
                 onClick={() => goToDate(addDays(selectedDate, -1))}
+                disabled={isFirstDate}
                 aria-label="Önceki gün"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </button>
               <input
                 type="date"
                 value={dateStr}
-                min={format(addDays(new Date(), -365), 'yyyy-MM-dd')}
+                min={earliestDateStr}
                 max={lastBookingDateStr}
                 onChange={(event) => {
                   if (event.target.value) {
@@ -741,7 +755,7 @@ const AppointmentsDayView = () => {
         </div>
       )}
 
-      {loading ? (
+      {loading && appointments.length === 0 ? (
         <div className="space-y-3">
           {[0, 1, 2].map((index) => (
             <div
@@ -795,6 +809,7 @@ const AppointmentsDayView = () => {
             <button
               type="button"
               onClick={() => goToDate(addDays(selectedDate, -1))}
+              disabled={isFirstDate}
               className={secondaryButton}
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />

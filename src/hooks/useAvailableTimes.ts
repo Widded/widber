@@ -15,6 +15,8 @@ export const useAvailableTimes = (selectedDate: string, selectedBarber: Barber |
       return;
     }
     
+    let active = true;
+
     const fetchBookedTimes = async () => {
       setFetchingTimes(true);
       try {
@@ -23,11 +25,13 @@ export const useAvailableTimes = (selectedDate: string, selectedBarber: Barber |
             .from('appointments')
             .select('appointment_time, barber_id, total_duration')
             .eq('appointment_date', selectedDate)
+            .eq('barber_id', selectedBarber.id)
             .in('status', ['pending', 'approved', 'completed']),
           supabase
             .from('barber_blocked_times')
             .select('blocked_time, barber_id')
-            .eq('blocked_date', selectedDate),
+            .eq('blocked_date', selectedDate)
+            .eq('barber_id', selectedBarber.id),
         ]);
 
         if (appointmentsResult.error) throw appointmentsResult.error;
@@ -95,16 +99,20 @@ export const useAvailableTimes = (selectedDate: string, selectedBarber: Barber |
           });
         }
         
+        if (!active) return;
         setBookedTimes(Array.from(finalBlockedSlots));
       } catch (err) {
         console.error("Dolu saatler çekilirken hata:", err);
       } finally {
-        setFetchingTimes(false);
+        if (active) setFetchingTimes(false);
       }
     };
     
     fetchBookedTimes();
-  }, [selectedDate, selectedBarber, totalDuration, refreshKey]);
 
+    return () => {
+      active = false;
+    };
+  }, [selectedDate, selectedBarber, totalDuration, refreshKey]);
   return { bookedTimes, fetchingTimes, refresh };
 };

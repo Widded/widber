@@ -7,10 +7,17 @@ import { tr } from 'date-fns/locale';
 import { useAdminAppointments } from '../../hooks/useAdminAppointments';
 
 const CalendarView = () => {
-  const { appointments, loading: appointmentsLoading } = useAdminAppointments();
   const [currentDate, setCurrentDate] = useState(new Date());
-
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekStartStr = format(weekStart, 'yyyy-MM-dd');
+  const weekEndStr = format(addDays(weekStart, 6), 'yyyy-MM-dd');
+  const appointmentRange = useMemo(
+    () => ({ from: weekStartStr, to: weekEndStr }),
+    [weekStartStr, weekEndStr]
+  );
+  const { appointments, loading: appointmentsLoading } =
+    useAdminAppointments(appointmentRange);
+
   const weekDays = Array.from({ length: 7 }).map((_, i) => addDays(weekStart, i));
 
   // 30 dakikalık temel ızgara + randevuların gerçek saatleri (45 dk, 00:00 vb.)
@@ -68,7 +75,7 @@ const CalendarView = () => {
               ))}
             </div>
             
-            {appointmentsLoading ? (
+            {appointmentsLoading && appointments.length === 0 ? (
               <div className="flex items-center justify-center h-[500px]">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
               </div>

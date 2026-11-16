@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { QuickBookingWidget } from '../../components/QuickBookingWidget';
-import { FastBookingModal } from '../../components/FastBookingModal';
+
+const FastBookingModal = lazy(() =>
+  import('../../components/FastBookingModal').then((module) => ({
+    default: module.FastBookingModal,
+  }))
+);
 
 const Home = () => {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -69,7 +74,9 @@ const Home = () => {
             aria-hidden="true"
           />
           <div className="relative z-10 w-full max-w-md">
-            <FastBookingModal onClose={() => setIsBookingOpen(false)} />
+            <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-white/80" />}>
+              <FastBookingModal onClose={() => setIsBookingOpen(false)} />
+            </Suspense>
           </div>
         </div>
       )}

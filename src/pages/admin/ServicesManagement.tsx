@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Service } from '../../context/BookingContext';
+import { invalidatePublicDataCache } from '../../hooks/useSupabaseData';
 
 const ServicesManagement = () => {
   const [services, setServices] = useState<Service[]>([]);
@@ -110,6 +111,7 @@ const ServicesManagement = () => {
       }
 
       resetForm();
+      invalidatePublicDataCache();
       void fetchServices();
       setModalState({
         isOpen: true,
@@ -154,6 +156,7 @@ const ServicesManagement = () => {
       const { error } = await supabase.from('services').delete().eq('id', id);
 
       if (error) throw error;
+      invalidatePublicDataCache();
       void fetchServices();
       setModalState({
         isOpen: true,

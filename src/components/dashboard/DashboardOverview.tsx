@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { endOfMonth, format, isSameDay, parseISO, startOfMonth, addDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -41,12 +41,20 @@ const StatCard = ({ icon: Icon, label, value, note }: StatCardProps) => (
 
 const DashboardOverview = () => {
   const { isAdmin } = useAuth();
-  const { appointments, loading, error, refresh } = useAdminAppointments();
 
   const now = new Date();
   const todayStr = format(now, 'yyyy-MM-dd');
   const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
+  const upcomingEnd = format(addDays(now, 7), 'yyyy-MM-dd');
+  const queryEnd = monthEnd > upcomingEnd ? monthEnd : upcomingEnd;
+  const appointmentRange = useMemo(
+    () => ({ from: monthStart, to: queryEnd }),
+    [monthStart, queryEnd]
+  );
+
+  const { appointments, loading, error, refresh } =
+    useAdminAppointments(appointmentRange);
 
   const todayAppointments = appointments
     .filter((appointment) => appointment.appointment_date === todayStr)

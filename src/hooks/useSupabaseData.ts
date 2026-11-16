@@ -36,10 +36,15 @@ const FALLBACK_WORKING_HOURS = [
 let inFlightRequest: Promise<PublicData> | null = null;
 let cachedData: PublicData | null = null;
 let cachedAt = 0;
-const CACHE_TTL = 15000;
+const CACHE_TTL = 5 * 60 * 1000;
 
 const getCachedData = () =>
   cachedData && Date.now() - cachedAt < CACHE_TTL ? cachedData : null;
+
+export const invalidatePublicDataCache = () => {
+  cachedData = null;
+  cachedAt = 0;
+};
 
 const loadPublicData = () => {
   const cached = getCachedData();

@@ -25,5 +25,10 @@ dist-ssr
 
 # Local tool config
 .opencode/
+supabase/.temp/
+.supabase/
+
+# Local backups
+*.rar
 
 .env

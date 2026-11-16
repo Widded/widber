@@ -4,6 +4,7 @@ import { tr } from 'date-fns/locale';
 import { CalendarPlus, Check, Clock3, Loader2, Phone, Scissors, UserRound } from 'lucide-react';
 import { Modal } from '../ui/modal';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
+import { useAuth } from '../../context/AuthContext';
 import { useAvailableTimes } from '../../hooks/useAvailableTimes';
 import { splitTimeSlots } from '../../lib/availability';
 import { getBookingDates } from '../../lib/bookingDates';
@@ -28,6 +29,7 @@ export const ManualAppointmentModal = ({
   onCreated,
   initialDate,
 }: ManualAppointmentModalProps) => {
+  const { isAdmin, staffBarber } = useAuth();
   const { services, barbers, loading: dataLoading } = useSupabaseData();
   const availableDates = useMemo(() => getBookingDates(), []);
   const firstDateStr = availableDates[0]
@@ -45,7 +47,12 @@ export const ManualAppointmentModal = ({
   const [saving, setSaving] = useState(false);
 
   const selectedServices = services.filter((service) => serviceIds.includes(service.id));
-  const selectedBarber = barbers.find((barber) => barber.id === barberId) ?? null;
+  const staffBarberRecord = staffBarber
+    ? barbers.find((barber) => barber.id === staffBarber.id) ?? null
+    : null;
+  const selectedBarber = isAdmin
+    ? barbers.find((barber) => barber.id === barberId) ?? null
+    : staffBarberRecord;
   const totalDuration = selectedServices.reduce((sum, service) => sum + service.duration, 0);
   const totalPrice = selectedServices.reduce((sum, service) => sum + service.price, 0);
 
@@ -74,18 +81,22 @@ export const ManualAppointmentModal = ({
     setLastName('');
     setPhone('');
     setServiceIds([]);
-    setBarberId('');
+    setBarberId(isAdmin ? '' : staffBarber?.id ?? '');
     setDateStr(initialDateStr);
     setTime('');
     setError(null);
     setSaving(false);
-  }, [isOpen, initialDate, availableDates, firstDateStr]);
+  }, [isOpen, initialDate, availableDates, firstDateStr, isAdmin, staffBarber?.id]);
 
   useEffect(() => {
-    if (isOpen && !barberId && barbers.length > 0) {
+    if (!isOpen || barberId) return;
+
+    if (isAdmin && barbers.length > 0) {
       setBarberId(barbers[0].id);
+    } else if (!isAdmin && staffBarber) {
+      setBarberId(staffBarber.id);
     }
-  }, [isOpen, barberId, barbers]);
+  }, [isOpen, barberId, barbers, isAdmin, staffBarber]);
 
   const toggleService = (id: string) => {
     setServiceIds((previous) =>
@@ -118,8 +129,17 @@ export const ManualAppointmentModal = ({
       return;
     }
 
-    if (!selectedBarber || !dateStr || !time) {
-      setError('Personel, tarih ve saat seçin.');
+    if (!selectedBarber) {
+      setError(
+        isAdmin
+          ? 'Personel seçin.'
+          : 'Bu hesap bir personelle eşleşmiyor. Yöneticinize başvurun.'
+      );
+      return;
+    }
+
+    if (!dateStr || !time) {
+      setError('Tarih ve saat seçin.');
       return;
     }
 
@@ -188,8 +208,49 @@ export const ManualAppointmentModal = ({
       title="Yeni randevu"
       icon={<CalendarPlus className="h-4 w-4" />}
       maxWidth="max-w-2xl"
+      footer={
+        <>
+          {error && (
+            <p className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+              {error}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Toplam</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {formatPrice(totalPrice)} · {totalDuration} dk
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                İptal
+              </button>
+              <button
+                type="submit"
+                form="manual-appointment-form"
+                disabled={saving}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Clock3 className="h-4 w-4" aria-hidden="true" />
+                )}
+                Randevu oluştur
+              </button>
+            </div>
+          </div>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form id="manual-appointment-form" onSubmit={handleSubmit} className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="manual-first-name" className="text-xs font-medium text-slate-600">
@@ -249,7 +310,7 @@ export const ManualAppointmentModal = ({
             </span>
           </div>
 
-          <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-1.5">
+          <div className="mt-1.5 space-y-1 rounded-lg border border-slate-200 p-1.5 sm:max-h-44 sm:overflow-y-auto">
             {dataLoading ? (
               <p className="px-2 py-6 text-center text-xs text-slate-400">Hizmetler yükleniyor...</p>
             ) : services.length === 0 ? (
@@ -304,32 +365,53 @@ export const ManualAppointmentModal = ({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label htmlFor="manual-barber" className="text-xs font-medium text-slate-600">
-              Personel
-            </label>
-            <div className="relative mt-1.5">
-              <UserRound
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                aria-hidden="true"
-              />
-              <select
-                id="manual-barber"
-                value={barberId}
-                onChange={(event) => {
-                  setBarberId(event.target.value);
-                  setTime('');
-                }}
-                className={cn(inputClass, 'appearance-none pl-9')}
-                required
-              >
-                <option value="">Personel seçin</option>
-                {barbers.map((barber) => (
-                  <option key={barber.id} value={barber.id}>
-                    {barber.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isAdmin ? (
+              <label htmlFor="manual-barber" className="text-xs font-medium text-slate-600">
+                Personel
+              </label>
+            ) : (
+              <p className="text-xs font-medium text-slate-600">Personel</p>
+            )}
+
+            {isAdmin ? (
+              <div className="relative mt-1.5">
+                <UserRound
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <select
+                  id="manual-barber"
+                  value={barberId}
+                  onChange={(event) => {
+                    setBarberId(event.target.value);
+                    setTime('');
+                  }}
+                  className={cn(inputClass, 'appearance-none pl-9')}
+                  required
+                >
+                  <option value="">Personel seçin</option>
+                  {barbers.map((barber) => (
+                    <option key={barber.id} value={barber.id}>
+                      {barber.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <>
+                <div className="mt-1.5 flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                  <UserRound className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                  <span className="truncate">
+                    {staffBarberRecord?.name ?? staffBarber?.name ?? 'Eşleşme bulunamadı'}
+                  </span>
+                </div>
+                {!dataLoading && !staffBarberRecord && (
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-red-500">
+                    Bu hesap bir personelle eşleşmiyor. Yöneticinize başvurun.
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           <div>
@@ -402,43 +484,6 @@ export const ManualAppointmentModal = ({
               })}
             </div>
           )}
-        </div>
-
-        {error && (
-          <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-            {error}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Toplam</p>
-            <p className="text-sm font-semibold text-slate-900">
-              {formatPrice(totalPrice)} · {totalDuration} dk
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-            >
-              İptal
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Clock3 className="h-4 w-4" aria-hidden="true" />
-              )}
-              Randevu oluştur
-            </button>
-          </div>
         </div>
       </form>
     </Modal>

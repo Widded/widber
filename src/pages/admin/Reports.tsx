@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  addDays,
   eachDayOfInterval,
   endOfDay,
   endOfMonth,
@@ -16,20 +17,6 @@ import {
 } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import {
   BarChart3,
   CalendarDays,
   ChevronRight,
@@ -39,7 +26,7 @@ import {
   RefreshCw,
   Wallet,
 } from 'lucide-react';
-import { useAdminAppointments } from '../../hooks/useAdminAppointments';
+import { useAdminAppointments, clearAppointmentsCache } from '../../hooks/useAdminAppointments';
 import { useAuth } from '../../context/AuthContext';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
 import {
@@ -59,6 +46,28 @@ import {
   iconButton,
   primaryButton,
 } from '../../components/admin/editorial';
+
+const RevenueChart = lazy(() =>
+  import('../../components/admin/ReportsCharts').then((module) => ({
+    default: module.RevenueChart,
+  }))
+);
+
+const StatusPieChart = lazy(() =>
+  import('../../components/admin/ReportsCharts').then((module) => ({
+    default: module.StatusPieChart,
+  }))
+);
+
+const MonthlyBarChart = lazy(() =>
+  import('../../components/admin/ReportsCharts').then((module) => ({
+    default: module.MonthlyBarChart,
+  }))
+);
+
+const ChartSkeleton = ({ className }: { className: string }) => (
+  <div className={cn('animate-pulse rounded-lg bg-slate-100', className)} />
+);
 
 type Period = 'thisMonth' | 'lastMonth' | 'thisYear' | 'last30';
 
@@ -154,13 +163,28 @@ const ReportStat = ({ label, value, note, delta }: ReportStatProps) => (
 
 const Reports = () => {
   const { isAdmin, user } = useAuth();
-  const { appointments, loading, error, refresh } = useAdminAppointments();
   const { barbers } = useSupabaseData();
   const [period, setPeriod] = useState<Period>('thisMonth');
   const [barberFilter, setBarberFilter] = useState('all');
   const [isLive, setIsLive] = useState(false);
+  const refreshTimerRef = useRef<number | null>(null);
 
   const range = useMemo(() => getPeriodRange(period), [period]);
+  const barYear = range.end.getFullYear();
+  const reportRange = useMemo(() => {
+    const yearStart = new Date(barYear - 1, 0, 1);
+    const yearEnd = new Date(barYear, 11, 31);
+    const upcomingEnd = addDays(new Date(), 7);
+    const end = yearEnd.getTime() > upcomingEnd.getTime() ? yearEnd : upcomingEnd;
+
+    return {
+      from: format(yearStart, 'yyyy-MM-dd'),
+      to: format(end, 'yyyy-MM-dd'),
+    };
+  }, [barYear]);
+
+  const { appointments, loading, error, refresh } =
+    useAdminAppointments(reportRange);
   const periodLabel =
     PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? 'Bu ay';
   const selectedBarber = barbers.find((barber) => barber.id === barberFilter);
@@ -190,17 +214,35 @@ const Reports = () => {
     [scopedAppointments, range]
   );
 
-  const activeAppointments = periodAppointments.filter(
-    (appointment) => appointment.status !== 'cancelled' && appointment.status !== 'rejected'
+  const activeAppointments = useMemo(
+    () =>
+      periodAppointments.filter(
+        (appointment) =>
+          appointment.status !== 'cancelled' && appointment.status !== 'rejected'
+      ),
+    [periodAppointments]
   );
-  const previousActiveAppointments = previousAppointments.filter(
-    (appointment) => appointment.status !== 'cancelled' && appointment.status !== 'rejected'
+  const previousActiveAppointments = useMemo(
+    () =>
+      previousAppointments.filter(
+        (appointment) =>
+          appointment.status !== 'cancelled' && appointment.status !== 'rejected'
+      ),
+    [previousAppointments]
   );
-  const completed = periodAppointments.filter(
-    (appointment) => appointment.status === 'completed'
+  const completed = useMemo(
+    () =>
+      periodAppointments.filter(
+        (appointment) => appointment.status === 'completed'
+      ),
+    [periodAppointments]
   );
-  const previousCompleted = previousAppointments.filter(
-    (appointment) => appointment.status === 'completed'
+  const previousCompleted = useMemo(
+    () =>
+      previousAppointments.filter(
+        (appointment) => appointment.status === 'completed'
+      ),
+    [previousAppointments]
   );
 
   const totalClients = new Set(activeAppointments.map(getClientKey)).size;
@@ -243,36 +285,46 @@ const Reports = () => {
   ].filter((item) => item.value > 0);
   const statusTotal = statusData.reduce((sum, item) => sum + item.value, 0);
 
-  const barYear = range.end.getFullYear();
-  const monthlyData = useMemo(
-    () =>
-      Array.from({ length: 12 }).map((_, index) => {
-        const currentYearCount = scopedAppointments.filter((appointment) => {
-          const date = parseISO(appointment.appointment_date);
-          return date.getFullYear() === barYear && date.getMonth() === index;
-        }).length;
-        const previousYearCount = scopedAppointments.filter((appointment) => {
-          const date = parseISO(appointment.appointment_date);
-          return date.getFullYear() === barYear - 1 && date.getMonth() === index;
-        }).length;
+  const monthlyData = useMemo(() => {
+    const currentCounts = Array.from({ length: 12 }, () => 0);
+    const previousCounts = Array.from({ length: 12 }, () => 0);
 
-        return {
-          month: format(new Date(barYear, index, 1), 'MMM', { locale: tr }),
-          current: currentYearCount,
-          previous: previousYearCount,
-        };
-      }),
-    [scopedAppointments, barYear]
-  );
+    scopedAppointments.forEach((appointment) => {
+      const date = parseISO(appointment.appointment_date);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+
+      if (year === barYear) {
+        currentCounts[month] += 1;
+      } else if (year === barYear - 1) {
+        previousCounts[month] += 1;
+      }
+    });
+
+    return Array.from({ length: 12 }).map((_, index) => ({
+      month: format(new Date(barYear, index, 1), 'MMM', { locale: tr }),
+      current: currentCounts[index],
+      previous: previousCounts[index],
+    }));
+  }, [scopedAppointments, barYear]);
 
   const revenueData = useMemo(() => {
     const now = new Date();
 
     if (period === 'thisYear') {
-      const latestCompletedMonth = completed.reduce((latest, appointment) => {
+      const monthlyRevenue = Array.from({ length: 12 }, () => 0);
+
+      completed.forEach((appointment) => {
         const date = parseISO(appointment.appointment_date);
-        return date.getFullYear() === barYear ? Math.max(latest, date.getMonth()) : latest;
-      }, -1);
+        if (date.getFullYear() === barYear) {
+          monthlyRevenue[date.getMonth()] += Number(appointment.total_price || 0);
+        }
+      });
+
+      const latestCompletedMonth = monthlyRevenue.reduce(
+        (latest, revenue, index) => (revenue > 0 ? Math.max(latest, index) : latest),
+        -1
+      );
       const monthCount = Math.min(
         12,
         Math.max(
@@ -281,19 +333,10 @@ const Reports = () => {
         )
       );
 
-      return Array.from({ length: monthCount }).map((_, index) => {
-        const revenue = completed
-          .filter((appointment) => {
-            const date = parseISO(appointment.appointment_date);
-            return date.getFullYear() === barYear && date.getMonth() === index;
-          })
-          .reduce((sum, appointment) => sum + Number(appointment.total_price || 0), 0);
-
-        return {
-          label: format(new Date(barYear, index, 1), 'MMM', { locale: tr }),
-          revenue,
-        };
-      });
+      return Array.from({ length: monthCount }).map((_, index) => ({
+        label: format(new Date(barYear, index, 1), 'MMM', { locale: tr }),
+        revenue: monthlyRevenue[index],
+      }));
     }
 
     const lastRevenueDate = completed.reduce((latest, appointment) => {
@@ -320,18 +363,19 @@ const Reports = () => {
     });
   }, [completed, period, range, barYear]);
 
-  const weekdayData = useMemo(
-    () =>
-      ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((label, index) => {
-        const count = activeAppointments.filter((appointment) => {
-          const day = parseISO(appointment.appointment_date).getDay();
-          return (day + 6) % 7 === index;
-        }).length;
+  const weekdayData = useMemo(() => {
+    const counts = Array.from({ length: 7 }, () => 0);
 
-        return { label, count };
-      }),
-    [activeAppointments]
-  );
+    activeAppointments.forEach((appointment) => {
+      const day = parseISO(appointment.appointment_date).getDay();
+      counts[(day + 6) % 7] += 1;
+    });
+
+    return ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map((label, index) => ({
+      label,
+      count: counts[index],
+    }));
+  }, [activeAppointments]);
   const maxWeekdayCount = Math.max(1, ...weekdayData.map((item) => item.count));
 
   const heatmapData = useMemo(() => {
@@ -378,7 +422,16 @@ const Reports = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'appointments' },
         () => {
-          void refresh();
+          clearAppointmentsCache();
+
+          if (refreshTimerRef.current) {
+            window.clearTimeout(refreshTimerRef.current);
+          }
+
+          refreshTimerRef.current = window.setTimeout(() => {
+            refreshTimerRef.current = null;
+            void refresh();
+          }, 350);
         }
       )
       .subscribe((status) => {
@@ -386,6 +439,9 @@ const Reports = () => {
       });
 
     return () => {
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
       void supabase.removeChannel(channel);
     };
   }, [refresh, user?.id]);
@@ -594,59 +650,9 @@ const Reports = () => {
                 text="Seçili dönemde tamamlanan randevu oluştuğunda ciro grafiği burada görünecek."
               />
             ) : (
-              <div className="h-[220px] w-full sm:h-[280px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={revenueData}
-                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="reportRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2563EB" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                    <XAxis
-                      dataKey="label"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#94A3B8' }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#94A3B8' }}
-                      width={40}
-                      tickFormatter={(value) =>
-                        Number(value) >= 1000
-                          ? `₺${Math.round(Number(value) / 1000)}k`
-                          : `₺${Number(value)}`
-                      }
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: '1px solid #E2E8F0',
-                        fontSize: 12,
-                        background: '#FFFFFF',
-                      }}
-                      formatter={(value) => formatPrice(Number(value))}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      name="Ciro"
-                      stroke="#2563EB"
-                      strokeWidth={2.5}
-                      fill="url(#reportRevenue)"
-                      dot={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              <Suspense fallback={<ChartSkeleton className="h-[220px] w-full sm:h-[280px]" />}>
+                <RevenueChart data={revenueData} />
+              </Suspense>
             )}
           </Panel>
 
@@ -663,66 +669,9 @@ const Reports = () => {
                 text="Seçili dönemde randevular oluştuğunda dağılım burada görünecek."
               />
             ) : (
-              <>
-                <div className="relative h-[180px] sm:h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={55}
-                        outerRadius={82}
-                        paddingAngle={3}
-                        stroke="none"
-                      >
-                        {statusData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 12,
-                          border: '1px solid #E2E8F0',
-                          fontSize: 12,
-                          background: '#FFFFFF',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#94A3B8]">
-                      Toplam
-                    </span>
-                    <span className="font-bold text-3xl leading-none text-[#0F172A]">
-                      {statusTotal}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-2 space-y-2.5">
-                  {statusData.map((entry) => (
-                    <div
-                      key={entry.name}
-                      className="flex items-center justify-between gap-2 text-[11px]"
-                    >
-                      <span className="flex items-center gap-2 font-medium text-[#475569]">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: entry.color }}
-                          aria-hidden="true"
-                        />
-                        {entry.name}
-                      </span>
-                      <span className="font-bold text-[#0F172A]">
-                        {entry.value}
-                        <span className="ml-1.5 text-[9px] font-medium text-[#94A3B8]">
-                          %{Math.round((entry.value / statusTotal) * 100)}
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
+              <Suspense fallback={<ChartSkeleton className="h-[300px] w-full" />}>
+                <StatusPieChart data={statusData} total={statusTotal} />
+              </Suspense>
             )}
           </Panel>
         </div>
@@ -746,48 +695,9 @@ const Reports = () => {
             }
             className="xl:col-span-7"
           >
-            <div className="h-[220px] w-full sm:h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: '#94A3B8' }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: '#94A3B8' }}
-                    width={28}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 12,
-                      border: '1px solid #E2E8F0',
-                      fontSize: 12,
-                      background: '#FFFFFF',
-                    }}
-                  />
-                  <Bar
-                    dataKey="current"
-                    name={String(barYear)}
-                    fill="#0F172A"
-                    radius={[5, 5, 0, 0]}
-                    maxBarSize={18}
-                  />
-                  <Bar
-                    dataKey="previous"
-                    name={String(barYear - 1)}
-                    fill="#E2E8F0"
-                    radius={[5, 5, 0, 0]}
-                    maxBarSize={18}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <Suspense fallback={<ChartSkeleton className="h-[220px] w-full sm:h-[260px]" />}>
+              <MonthlyBarChart data={monthlyData} year={barYear} />
+            </Suspense>
           </Panel>
 
           <Panel

@@ -26,6 +26,7 @@ import {
   secondaryButton,
 } from '../../components/admin/editorial';
 import { getBookingDates, getFirstBookingDate } from '../../lib/bookingDates';
+import { invalidatePublicDataCache } from '../../hooks/useSupabaseData';
 
 interface BlockedTime {
   id: string;
@@ -196,6 +197,7 @@ const AvailabilityManagement = () => {
       }
 
       setHasChanges(false);
+      invalidatePublicDataCache();
       setModalConfig({
         isOpen: true,
         type: 'success',

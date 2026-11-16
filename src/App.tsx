@@ -4,13 +4,6 @@ import { format } from 'date-fns';
 import { getFirstBookingDate } from './lib/bookingDates';
 import { BookingProvider } from './context/BookingContext';
 import Home from './pages/client/Home';
-import BookingWizard from './pages/client/BookingWizard';
-import AppointmentsDayView from './pages/admin/AppointmentsDayView';
-import CalendarView from './pages/admin/CalendarView';
-import ServicesManagement from './pages/admin/ServicesManagement';
-import BarbersManagement from './pages/admin/BarbersManagement';
-import AvailabilityManagement from './pages/admin/AvailabilityManagement';
-import Login from './pages/admin/Login';
 import Layout from './components/layout/Layout';
 import RoleLayout from './components/layout/RoleLayout';
 import OwnerOnlyRoute from './components/layout/OwnerOnlyRoute';
@@ -19,6 +12,13 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import NotFound from './pages/NotFound';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+const BookingWizard = lazy(() => import('./pages/client/BookingWizard'));
+const AppointmentsDayView = lazy(() => import('./pages/admin/AppointmentsDayView'));
+const CalendarView = lazy(() => import('./pages/admin/CalendarView'));
+const ServicesManagement = lazy(() => import('./pages/admin/ServicesManagement'));
+const BarbersManagement = lazy(() => import('./pages/admin/BarbersManagement'));
+const AvailabilityManagement = lazy(() => import('./pages/admin/AvailabilityManagement'));
+const Login = lazy(() => import('./pages/admin/Login'));
 const Reports = lazy(() => import('./pages/admin/Reports'));
 const OwnerDashboard = lazy(() => import('./pages/admin/OwnerDashboard'));
 const StaffDashboard = lazy(() => import('./pages/admin/StaffDashboard'));
@@ -51,7 +51,8 @@ function App() {
     <Router>
       <AuthProvider>
         <BookingProvider>
-          <Routes>
+          <Suspense fallback={<PageLoading />}>
+            <Routes>
             {/* Client Routes */}
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
@@ -115,6 +116,7 @@ function App() {
             {/* Catch-all 404 Route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </BookingProvider>
       </AuthProvider>
     </Router>

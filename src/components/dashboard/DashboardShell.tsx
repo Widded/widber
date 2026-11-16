@@ -18,6 +18,32 @@ type DashboardShellProps = {
 
 const STORAGE_KEY = 'widber-dashboard-sidebar-collapsed';
 
+const prefetchAdminRoute = (path: string) => {
+  if (path.startsWith('/admin/appointments')) {
+    void import('../../pages/admin/AppointmentsDayView');
+    return;
+  }
+
+  if (path === '/admin/reports') {
+    void import('../../pages/admin/Reports');
+    return;
+  }
+
+  if (path === '/admin/availability') {
+    void import('../../pages/admin/AvailabilityManagement');
+    return;
+  }
+
+  if (path === '/admin/services') {
+    void import('../../pages/admin/ServicesManagement');
+    return;
+  }
+
+  if (path === '/admin/barbers') {
+    void import('../../pages/admin/BarbersManagement');
+  }
+};
+
 const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -30,6 +56,15 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void import('../../pages/admin/AppointmentsDayView');
+      void import('../../pages/admin/AvailabilityManagement');
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -120,6 +155,9 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
                   to={item.path}
                   title={!showLabels ? item.label : undefined}
                   aria-current={active ? 'page' : undefined}
+                  onMouseEnter={() => prefetchAdminRoute(item.path)}
+                  onFocus={() => prefetchAdminRoute(item.path)}
+                  onTouchStart={() => prefetchAdminRoute(item.path)}
                   className={cn(
                     'flex h-10 items-center gap-3 rounded-lg text-sm font-medium transition-colors',
                     showLabels ? 'px-3' : 'justify-center px-0',
@@ -229,6 +267,9 @@ const DashboardShell = ({ items, homePath, children }: DashboardShellProps) => {
                 key={item.path}
                 to={item.path}
                 aria-current={active ? 'page' : undefined}
+                onMouseEnter={() => prefetchAdminRoute(item.path)}
+                onFocus={() => prefetchAdminRoute(item.path)}
+                onTouchStart={() => prefetchAdminRoute(item.path)}
                 className={cn(
                   'flex flex-1 flex-col items-center gap-1 py-2.5 text-[9px] font-semibold transition-colors',
                   active ? 'text-blue-600' : 'text-slate-400 hover:text-slate-700'
