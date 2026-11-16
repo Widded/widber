@@ -13,6 +13,8 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import NotFound from './pages/NotFound';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+const routerBase = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
+
 const BookingWizard = lazy(() => import('./pages/client/BookingWizard'));
 const AppointmentsDayView = lazy(() => import('./pages/admin/AppointmentsDayView'));
 const CalendarView = lazy(() => import('./pages/admin/CalendarView'));
@@ -59,7 +61,7 @@ const AppointmentsIndexRedirect = () => {
 
 function App() {
   return (
-    <Router>
+    <Router basename={routerBase}>
       <AuthProvider>
         <BookingProvider>
           <Suspense fallback={<PageLoading />}>

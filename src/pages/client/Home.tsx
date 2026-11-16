@@ -36,16 +36,23 @@ const Home = () => {
   return (
     <div className="bg-white">
       {settings.announcement_enabled && settings.announcement_text && (
-        <div className="border-b border-blue-100 bg-blue-50">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-1 px-4 py-2.5 text-center text-xs font-medium text-blue-800 sm:flex-row sm:gap-2">
-            <Megaphone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>{settings.announcement_text}</span>
+        <div className="px-4 pt-3 sm:px-6">
+          <div className="mx-auto flex max-w-7xl flex-col gap-2 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4">
+            <div className="flex min-w-0 items-start gap-2.5 sm:items-center">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                <Megaphone className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+              <p className="text-[13px] font-medium leading-snug text-blue-900">
+                {settings.announcement_text}
+              </p>
+            </div>
+
             {settings.announcement_link_url && (
               <a
                 href={settings.announcement_link_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 font-semibold text-blue-700 underline-offset-2 hover:underline"
+                className="ml-9 inline-flex h-8 shrink-0 items-center gap-1 self-start rounded-full bg-white px-3 text-[11px] font-semibold text-blue-700 shadow-sm ring-1 ring-blue-100 transition-colors hover:bg-blue-600 hover:text-white sm:ml-0 sm:self-auto"
               >
                 {settings.announcement_link_label || 'Detay'}
                 <ArrowRight className="h-3 w-3" aria-hidden="true" />
