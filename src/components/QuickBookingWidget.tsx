@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format, isSameDay, isTomorrow, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Check, Info, Loader2, Zap } from 'lucide-react';
+import { Check, Info, Loader2, X, Zap } from 'lucide-react';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import { useAvailableTimes } from '../hooks/useAvailableTimes';
@@ -10,7 +10,7 @@ import { splitTimeSlots } from '../lib/availability';
 import { getBookingDates } from '../lib/bookingDates';
 import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
-import { findEarliestSlotToday } from '../lib/earliestSlot';
+import { findEarliestSlot } from '../lib/earliestSlot';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
@@ -27,10 +27,33 @@ const getInitials = (name: string) =>
     .map((part) => part.charAt(0).toUpperCase())
     .join('') || 'P';
 
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 1023px)').matches
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1023px)');
+    const handleChange = () => setIsMobile(query.matches);
+
+    handleChange();
+    query.addEventListener('change', handleChange);
+    return () => query.removeEventListener('change', handleChange);
+  }, []);
+
+  return isMobile;
+};
+
+const selectClass =
+  'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400';
+
 export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComplete }) => {
   const { services, barbers, loading } = useSupabaseData();
   const { settings } = useSiteSettings();
   const { setServices, setBarber, setDateTime } = useBooking();
+  const isMobile = useIsMobile();
 
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [barberId, setBarberId] = useState('');
@@ -94,6 +117,30 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
+  const summaryRows = [
+    {
+      label: 'Hizmet',
+      value:
+        selectedServices.length === 0
+          ? SUMMARY_PLACEHOLDER
+          : selectedServices.map((service) => service.name).join(', '),
+    },
+    { label: 'Usta', value: selectedBarber?.name ?? SUMMARY_PLACEHOLDER },
+    {
+      label: 'Tarih',
+      value: dateStr ? format(parseISO(dateStr), 'd MMMM', { locale: tr }) : SUMMARY_PLACEHOLDER,
+      hint: dateStr && dateStr === todayStr ? 'Bugün' : undefined,
+    },
+    { label: 'Saat', value: time || SUMMARY_PLACEHOLDER },
+  ];
+
+  const dateOptionLabel = (date: Date) =>
+    isSameDay(date, new Date())
+      ? 'Bugün'
+      : isTomorrow(date)
+        ? 'Yarın'
+        : format(date, 'd MMM', { locale: tr });
+
   const toggleService = (id: string) => {
     setFindMessage(null);
     setServiceIds((prev) =>
@@ -118,23 +165,36 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     setTime(value);
   };
 
+  const handleAddService = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = event.target.value;
+    if (id) toggleService(id);
+  };
+
   const handleFindEarliest = async () => {
     setIsFindingSlot(true);
     setFindMessage(null);
 
     try {
-      const slot = await findEarliestSlotToday(barbers, settings);
+      const slot = await findEarliestSlot(barbers, settings);
 
       if (!slot) {
-        setFindMessage('Bugün müsait saat kalmadı. Başka bir gün seçebilirsin.');
+        setFindMessage('Yakın tarihlerde müsait saat yok. Lütfen bizimle iletişime geç.');
         return;
       }
 
       setBarberId(slot.barber.id);
-      setDateStr(todayStr);
+      setDateStr(slot.date);
       setTime(slot.time);
+
+      const dayLabel =
+        slot.date === todayStr
+          ? 'Bugün'
+          : isTomorrow(parseISO(slot.date))
+            ? 'Yarın'
+            : format(parseISO(slot.date), 'd MMM', { locale: tr });
+
       setFindMessage(
-        `Bugün en erken: ${slot.time} · ${slot.barber.name}${
+        `En erken: ${dayLabel} ${slot.time} · ${slot.barber.name}${
           selectedServices.length === 0 ? ' — bir hizmet seç' : ''
         }`
       );
@@ -170,6 +230,212 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         <div className="h-[520px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
         <div className="h-[320px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
       </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="m-hizmet" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                Hizmet
+              </label>
+              <select
+                id="m-hizmet"
+                className={selectClass}
+                value=""
+                onChange={handleAddService}
+              >
+                <option value="">
+                  {services.length === 0 ? 'Hizmet bulunamadı' : 'Hizmet ekle…'}
+                </option>
+                {services
+                  .filter((service) => !serviceIds.includes(service.id))
+                  .map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name} — {formatPrice(service.price)}
+                    </option>
+                  ))}
+              </select>
+
+              {selectedServices.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedServices.map((service) => (
+                    <span
+                      key={service.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-50 py-1 pl-2.5 pr-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100"
+                    >
+                      {service.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleService(service.id)}
+                        aria-label={`${service.name} kaldır`}
+                        className="rounded-full p-0.5 transition-colors hover:bg-blue-100"
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="m-usta" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                Usta
+              </label>
+              <select
+                id="m-usta"
+                className={selectClass}
+                value={barberId}
+                onChange={(event) => selectBarber(event.target.value)}
+              >
+                <option value="">Usta seçin</option>
+                {barbers.map((barber) => {
+                  const hasHours = Boolean(barber.working_hours?.length);
+                  return (
+                    <option key={barber.id} value={barber.id} disabled={!hasHours}>
+                      {barber.name}
+                      {hasHours ? '' : ' (mesai yok)'}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="m-tarih" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Tarih
+                </label>
+                <select
+                  id="m-tarih"
+                  className={selectClass}
+                  value={dateStr}
+                  disabled={availableDates.length === 0}
+                  onChange={(event) => selectDate(event.target.value)}
+                >
+                  <option value="">
+                    {availableDates.length === 0 ? 'Kapalı' : 'Seçin'}
+                  </option>
+                  {availableDates.map((date) => {
+                    const value = format(date, 'yyyy-MM-dd');
+                    return (
+                      <option key={value} value={value}>
+                        {dateOptionLabel(date)} {format(date, 'd')}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="m-saat" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Saat
+                </label>
+                <select
+                  id="m-saat"
+                  className={selectClass}
+                  value={time}
+                  disabled={
+                    !selectedBarber || !dateStr || fetchingTimes || availableTimes.length === 0
+                  }
+                  onChange={(event) => selectTime(event.target.value)}
+                >
+                  <option value="">
+                    {!selectedBarber
+                      ? 'Önce usta'
+                      : !dateStr
+                        ? 'Önce tarih'
+                        : fetchingTimes
+                          ? 'Yükleniyor…'
+                          : availableTimes.length === 0
+                            ? 'Müsait yok'
+                            : 'Seçin'}
+                  </option>
+                  {availableTimes.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {settings.min_notice_minutes > 0 && (
+              <p className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
+                <Info className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                Randevu saatinden en az {settings.min_notice_minutes} dakika önce randevu
+                almanız gerekir.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleFindEarliest}
+              disabled={isFindingSlot}
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isFindingSlot ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              En erken saati bul
+            </button>
+
+            {findMessage && (
+              <p role="status" className="text-[11px] font-medium text-slate-500">
+                {findMessage}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            Randevu özeti
+          </h2>
+          <dl className="mt-2.5 space-y-2 text-xs">
+            {summaryRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-200 pb-2 last:border-0 last:pb-0"
+              >
+                <dt className="shrink-0 text-slate-500">{row.label}</dt>
+                <dd className="text-right font-semibold text-slate-900">
+                  {row.value}
+                  {row.hint && (
+                    <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                      {row.hint}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-xs text-slate-500">Toplam</span>
+            <b className="text-xl tracking-tight text-slate-900">{formatPrice(totalPrice)}</b>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 z-30 flex items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur">
+          <div className="shrink-0">
+            <span className="block text-[10px] text-slate-400">Toplam</span>
+            <b className="text-lg tracking-tight text-slate-900">{formatPrice(totalPrice)}</b>
+          </div>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="h-11 flex-1 rounded-xl bg-blue-600 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            Randevuyu onayla
+          </button>
+        </div>
+      </form>
     );
   }
 
@@ -420,24 +686,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         </h2>
 
         <dl className="mt-3 space-y-2.5 text-xs">
-          {[
-            {
-              label: 'Hizmet',
-              value:
-                selectedServices.length === 0
-                  ? SUMMARY_PLACEHOLDER
-                  : selectedServices.map((service) => service.name).join(', '),
-            },
-            { label: 'Usta', value: selectedBarber?.name ?? SUMMARY_PLACEHOLDER },
-            {
-              label: 'Tarih',
-              value: dateStr
-                ? format(parseISO(dateStr), 'd MMMM', { locale: tr })
-                : SUMMARY_PLACEHOLDER,
-              hint: dateStr && dateStr === todayStr ? 'Bugün' : undefined,
-            },
-            { label: 'Saat', value: time || SUMMARY_PLACEHOLDER },
-          ].map((row) => (
+          {summaryRows.map((row) => (
             <div
               key={row.label}
               className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-200 pb-2.5"
@@ -479,7 +728,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
             ) : (
               <Zap className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            Bugünün en erken saatini bul
+            En erken müsait saati bul
           </button>
         </div>
 

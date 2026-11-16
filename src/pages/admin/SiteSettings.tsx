@@ -326,16 +326,20 @@ const SiteSettingsPage = () => {
     setSaving(true);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('site_settings')
         .update({
           ...toDbPayload(form),
           updated_at: new Date().toISOString(),
           updated_by: user?.id ?? null,
         })
-        .eq('id', 1);
+        .eq('id', 1)
+        .select('id');
 
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error('Ayarlar güncellenemedi: yetki yok veya kayıt bulunamadı.');
+      }
 
       invalidateSiteSettingsCache();
       setSaved(form);
