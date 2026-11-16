@@ -29,7 +29,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div key="modal-wrapper" className="fixed inset-0 z-[100] flex items-center justify-center">
+        <motion.div
+          key="modal-wrapper"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+        >
           {/* Background Overlay */}
           <motion.div
             key="modal-backdrop"
@@ -91,7 +98,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 </div>
               </div>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

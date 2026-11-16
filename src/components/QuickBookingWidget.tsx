@@ -23,6 +23,7 @@ import { getBookingDates } from '../lib/bookingDates';
 import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
 import { findEarliestSlotToday } from '../lib/earliestSlot';
+import { Modal } from './ui/modal';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
@@ -192,7 +193,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   const [time, setTime] = useState('');
   const [activeField, setActiveField] = useState<FieldKey | null>(null);
   const [isFindingSlot, setIsFindingSlot] = useState(false);
-  const [findAfterService, setFindAfterService] = useState(false);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [foundSlot, setFoundSlot] = useState<{ time: string; barberName: string } | null>(null);
   const [findError, setFindError] = useState<string | null>(null);
 
@@ -273,11 +274,6 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeField]);
 
-  // Hizmet paneli kapandığında "önce hizmet seç" beklemesini temizle.
-  useEffect(() => {
-    if (activeField !== 'service') setFindAfterService(false);
-  }, [activeField]);
-
   const toggleService = (id: string) => {
     // Hizmet seçimi müsait saatleri değiştirmez (slot bazlı model), saati koru.
     setServiceIds((prev) =>
@@ -322,20 +318,14 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
       setFindError('Saatler kontrol edilemedi, lütfen tekrar dene.');
     } finally {
       setIsFindingSlot(false);
+      setServiceModalOpen(false);
     }
   };
 
-  const openServicePickerForFind = () => {
-    if (selectedServices.length > 0) {
-      void handleFindEarliest();
-      return;
-    }
+  const openServiceModal = () => setServiceModalOpen(true);
 
-    setFindAfterService(true);
-    setActiveField('service');
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {    event.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
 
     if (selectedServices.length === 0 || !selectedBarber || !dateStr || !time) return;
 
@@ -360,11 +350,12 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   }
 
   return (
-    <form
-      ref={widgetRef}
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-    >
+    <>
+      <form
+        ref={widgetRef}
+        onSubmit={handleSubmit}
+        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+      >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">Hızlı randevu</p>
@@ -389,7 +380,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
       <button
         type="button"
-        onClick={openServicePickerForFind}
+        onClick={openServiceModal}
         disabled={isFindingSlot || barbers.length === 0}
         className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-3 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -493,18 +484,11 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
               )}
               <button
                 type="button"
-                onClick={() => {
-                  if (findAfterService) {
-                    setActiveField(null);
-                    void handleFindEarliest();
-                    return;
-                  }
-                  setActiveField('barber');
-                }}
+                onClick={() => setActiveField('barber')}
                 disabled={selectedServices.length === 0}
                 className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
               >
-                {findAfterService ? 'En erken saati bul' : 'Devam et'}
+                Devam et
               </button>
             </div>
           </div>
@@ -698,6 +682,94 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
-    </form>
+      </form>
+
+      <Modal
+        isOpen={serviceModalOpen}
+        onClose={() => setServiceModalOpen(false)}
+        title="Hizmet seç"
+        icon={<Scissors className="h-5 w-5" aria-hidden="true" />}
+        footer={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setServiceModalOpen(false)}
+              className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleFindEarliest()}
+              disabled={selectedServices.length === 0 || isFindingSlot}
+              className="inline-flex h-10 flex-[1.5] items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            >
+              {isFindingSlot ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Zap className="h-4 w-4" aria-hidden="true" />
+              )}
+              En erken saati bul
+            </button>
+          </div>
+        }
+      >
+        <p className="text-xs leading-relaxed text-slate-500">
+          Bugünün en erken saatini bulmak için hizmetini seç. Birden fazla
+          hizmet seçebilirsin.
+        </p>
+
+        <div className="mt-3 space-y-1">
+          {services.length === 0 ? (
+            <p className="px-3 py-4 text-center text-xs text-slate-400">
+              Hizmet bulunamadı.
+            </p>
+          ) : (
+            services.map((service) => {
+              const selected = serviceIds.includes(service.id);
+
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleService(service.id)}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                    selected
+                      ? 'border-blue-300 bg-blue-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-slate-900">
+                      {service.name}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {service.duration} dk
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700">
+                      {formatPrice(service.price)}
+                    </span>
+                    <span
+                      className={cn(
+                        'flex h-4 w-4 items-center justify-center rounded border',
+                        selected
+                          ? 'border-blue-600 bg-blue-600 text-white'
+                          : 'border-slate-300 bg-white'
+                      )}
+                    >
+                      {selected && <Check className="h-3 w-3" aria-hidden="true" />}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </Modal>
+    </>
   );
 };
