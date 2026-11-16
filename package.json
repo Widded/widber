@@ -15,7 +15,6 @@
     "db:verify": "supabase db query --remote=nryskkhdubzedecrgkqx --file=supabase-verify.sql --read-only"
   },
   "dependencies": {
-    "@emailjs/browser": "^4.4.1",
     "@supabase/supabase-js": "^2.110.9",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",

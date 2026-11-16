@@ -199,10 +199,11 @@ create policy "appointments_select_staff"
 
 -- Anon yalnızca dolu saat hesabı için gerekli satırları okuyabilir.
 -- Kolon kısıtı aşağıdaki GRANT bölümünde: müşteri adı/telefonu okunamaz.
+-- 'completed' dahil: tamamlanmış randevunun saati de müşteriye dolu görünmeli.
 drop policy if exists "appointments_select_anon_slots" on public.appointments;
 create policy "appointments_select_anon_slots"
   on public.appointments for select to anon
-  using (status in ('pending', 'approved'));
+  using (status in ('pending', 'approved', 'completed'));
 
 -- Personel ve patron randevu durumunu güncelleyebilir.
 drop policy if exists "appointments_update_staff" on public.appointments;

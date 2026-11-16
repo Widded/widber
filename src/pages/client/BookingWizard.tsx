@@ -19,7 +19,6 @@ import { useAvailableTimes } from '../../hooks/useAvailableTimes';
 import { splitTimeSlots } from '../../lib/availability';
 import { supabase } from '../../lib/supabase';
 import { isSlotConflictError, SLOT_CONFLICT_MESSAGE } from '../../lib/bookingErrors';
-import emailjs from '@emailjs/browser';
 
 const STEPS = [
   { id: 1, title: 'Hizmet Seçimi' },
@@ -49,11 +48,6 @@ const BookingWizard = () => {
   const [firstName, setFirstName] = useState(appointment.customerInfo?.firstName || '');
   const [lastName, setLastName] = useState(appointment.customerInfo?.lastName || '');
   const [phone, setPhone] = useState(appointment.customerInfo?.phone || '');
-  const [email, setEmail] = useState(appointment.customerInfo?.email || '');
-
-  const [otpSent, setOtpSent] = useState(false);
-  const [enteredOtp, setEnteredOtp] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalState, setModalState] = useState<{
@@ -143,11 +137,7 @@ const BookingWizard = () => {
         setDateTime(new Date(selectedDate), selectedTime);
       }
     } else if (currentStep === 4) {
-      if (!email || !email.includes('@')) {
-        setModalState({ isOpen: true, type: 'danger', title: 'Hata', description: 'Lütfen geçerli bir e-posta adresi girin.' });
-        return;
-      }
-      setCustomerInfo({ firstName, lastName, phone, email });
+      setCustomerInfo({ firstName, lastName, phone });
     }
     
     if (currentStep < 5) {
@@ -168,8 +158,6 @@ const BookingWizard = () => {
       setSelectedServices([...selectedServices, service]);
     }
   };
-
-  // OTP Verification system has been removed based on user request
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
@@ -590,18 +578,6 @@ const BookingWizard = () => {
                             onChange={(e) => setLastName(e.target.value)}
                           />
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="font-semibold text-sm">E-posta Adresi</Label>
-                        <Input 
-                          id="email" 
-                          type="email"
-                          placeholder="ornek@mail.com" 
-                          className="rounded-lg border-slate-200 py-5 focus-visible:ring-1 focus-visible:ring-blue-500"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Sizinle iletişime geçebilmemiz için gereklidir.</p>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="phone" className="font-semibold text-sm">Telefon Numarası</Label>

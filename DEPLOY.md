@@ -37,9 +37,6 @@ SPA yönlendirmesi kök dizindeki `netlify.toml` ile hazır.
 - `VITE_ADMIN_EMAIL`
 - `VITE_STAFF_EMAIL`
 - `VITE_STAFF_PASSWORD`
-- `VITE_EMAILJS_SERVICE_ID`
-- `VITE_EMAILJS_TEMPLATE_ID`
-- `VITE_EMAILJS_PUBLIC_KEY`
 
 Not: `VITE_*` değişkenleri istemci paketine gömülür; gizli anahtar olarak
 kullanılmamalıdır.

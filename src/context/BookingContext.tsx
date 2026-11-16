@@ -25,7 +25,6 @@ export type AppointmentData = {
     firstName: string;
     lastName: string;
     phone: string;
-    email: string;
   } | null;
 };
 

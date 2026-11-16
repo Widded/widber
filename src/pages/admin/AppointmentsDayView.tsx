@@ -141,7 +141,6 @@ const AppointmentsDayView = () => {
   const firstBookingDate = bookingDates[0] ?? new Date();
   const lastBookingDate = bookingDates[bookingDates.length - 1] ?? new Date();
   const lastBookingDateStr = format(lastBookingDate, 'yyyy-MM-dd');
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayIsClosed =
     settings.closed_weekdays.includes(getDay(new Date())) || !settings.same_day_booking;
   const selectedIsInBookingRange = bookingDates.some((day) => isSameDay(day, selectedDate));

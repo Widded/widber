@@ -9,6 +9,8 @@ import {
   Scissors,
   UserRound,
   X,
+  Zap,
+  Info,
 } from 'lucide-react';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -20,6 +22,7 @@ import { splitTimeSlots } from '../lib/availability';
 import { getBookingDates } from '../lib/bookingDates';
 import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
+import { findEarliestSlotToday } from '../lib/earliestSlot';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
@@ -188,6 +191,10 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
   const [dateStr, setDateStr] = useState('');
   const [time, setTime] = useState('');
   const [activeField, setActiveField] = useState<FieldKey | null>(null);
+  const [isFindingSlot, setIsFindingSlot] = useState(false);
+  const [findAfterService, setFindAfterService] = useState(false);
+  const [foundSlot, setFoundSlot] = useState<{ time: string; barberName: string } | null>(null);
+  const [findError, setFindError] = useState<string | null>(null);
 
   const selectedServices = services.filter((service) => serviceIds.includes(service.id));
   const selectedBarber = barbers.find((barber) => barber.id === barberId) ?? null;
@@ -266,27 +273,69 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeField]);
 
+  // Hizmet paneli kapandığında "önce hizmet seç" beklemesini temizle.
+  useEffect(() => {
+    if (activeField !== 'service') setFindAfterService(false);
+  }, [activeField]);
+
   const toggleService = (id: string) => {
+    // Hizmet seçimi müsait saatleri değiştirmez (slot bazlı model), saati koru.
     setServiceIds((prev) =>
       prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]
     );
-    setTime('');
   };
 
   const selectBarber = (id: string) => {
     setBarberId(id);
     setTime('');
+    setFoundSlot(null);
     setActiveField('date');
   };
 
   const selectDate = (value: string) => {
     setDateStr(value);
     setTime('');
+    setFoundSlot(null);
     setActiveField('time');
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleFindEarliest = async () => {
+    setIsFindingSlot(true);
+    setFindError(null);
+    setFoundSlot(null);
+
+    try {
+      const slot = await findEarliestSlotToday(barbers, settings);
+
+      if (!slot) {
+        setFindError('Bugün müsait saat kalmadı. Başka bir gün seçebilirsin.');
+        return;
+      }
+
+      setDateStr(format(new Date(), 'yyyy-MM-dd'));
+      setBarberId(slot.barber.id);
+      setTime(slot.time);
+      setActiveField(null);
+      setFoundSlot({ time: slot.time, barberName: slot.barber.name });
+    } catch (error) {
+      console.error('En erken saat bulunamadı:', error);
+      setFindError('Saatler kontrol edilemedi, lütfen tekrar dene.');
+    } finally {
+      setIsFindingSlot(false);
+    }
+  };
+
+  const openServicePickerForFind = () => {
+    if (selectedServices.length > 0) {
+      void handleFindEarliest();
+      return;
+    }
+
+    setFindAfterService(true);
+    setActiveField('service');
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {    event.preventDefault();
 
     if (selectedServices.length === 0 || !selectedBarber || !dateStr || !time) return;
 
@@ -327,6 +376,43 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
           Anında onay
         </span>
       </div>
+
+      {settings.min_notice_minutes > 0 && (
+        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
+          <Info className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+          <span>
+            Randevu saatinden en az {settings.min_notice_minutes} dakika önce
+            randevu almanız gerekir.
+          </span>
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={openServicePickerForFind}
+        disabled={isFindingSlot || barbers.length === 0}
+        className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-3 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isFindingSlot ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+        Bugünün en erken saatini bul
+      </button>
+
+      {foundSlot && (
+        <p role="status" className="mt-2 text-[11px] font-medium text-slate-500">
+          Bugün en erken: {foundSlot.time} · {foundSlot.barberName}
+          {selectedServices.length === 0 ? ' — bir hizmet seç' : ''}
+        </p>
+      )}
+
+      {findError && (
+        <p role="status" className="mt-2 text-[11px] font-medium text-slate-500">
+          {findError}
+        </p>
+      )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <PickerField
@@ -407,11 +493,18 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
               )}
               <button
                 type="button"
-                onClick={() => setActiveField('barber')}
+                onClick={() => {
+                  if (findAfterService) {
+                    setActiveField(null);
+                    void handleFindEarliest();
+                    return;
+                  }
+                  setActiveField('barber');
+                }}
                 disabled={selectedServices.length === 0}
                 className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
               >
-                Devam et
+                {findAfterService ? 'En erken saati bul' : 'Devam et'}
               </button>
             </div>
           </div>
@@ -570,6 +663,7 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
                     aria-selected={selected}
                     onClick={() => {
                       setTime(availableTime);
+                      setFoundSlot(null);
                       setActiveField(null);
                     }}
                     className={cn(

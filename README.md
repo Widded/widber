@@ -1,32 +1,61 @@
-# React + TypeScript + Vite
+# WidBer — Berber Randevu Sistemi
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Tek işletmeli berber randevu uygulaması: müşteri tarafında hızlı randevu,
+yönetim tarafında personel ve patron panelleri. Sunucu yok; tüm veri Supabase'de.
 
-Currently, two official plugins are available:
+## Teknolojiler
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + TypeScript + Vite
+- Tailwind CSS 4
+- Supabase (Postgres, Auth, Storage)
+- react-router-dom, framer-motion, recharts, date-fns
 
-## React Compiler
+## Kurulum
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+cp .env.example .env   # değerleri doldur
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Gerekli ortam değişkenleri `.env.example` içinde listeli. `VITE_*` değişkenleri
+tarayıcı paketine gömülür, gizli anahtar olarak kullanılmamalıdır.
+
+## Veritabanı
+
+Yeni bir Supabase projesi için `supabase-setup.sql` dosyasını SQL Editor'de
+çalıştırın. Sonrasında sırayla:
+
+1. `supabase-site-settings.sql`
+2. `supabase-staff-panel.sql`
+3. `supabase-performance-indexes.sql`
+4. `supabase-slot-only-booking.sql`
+5. `supabase-security-performance-fixes.sql`
+6. `supabase-slot-visibility-fix.sql`
+
+Patron e-postası `supabase-setup.sql` içindeki `is_owner()` fonksiyonunda ve
+`.env` içindeki `VITE_ADMIN_EMAIL` değerinde **aynı** olmalıdır.
+
+## Komutlar
+
+| Komut | Açıklama |
+|---|---|
+| `npm run dev` | Geliştirme sunucusu |
+| `npm run build` | Tip kontrolü + üretim derlemesi |
+| `npm run lint` | oxlint |
+| `npm run preview` | Derlemeyi yerelde önizleme |
+| `npm run db:*` | Uzak Supabase'e SQL dosyası uygulama (bkz. `package.json`) |
+
+## Sayfalar
+
+- `/` — ana sayfa, hızlı randevu widget'ı
+- `/booking` — 5 adımlı randevu sihirbazı
+- `/admin/login` — personel girişi (PIN)
+- `/admin/login/staff` — patron girişi (e-posta/şifre)
+- `/admin/appointments/:date` — günlük randevular
+- `/admin/calendar`, `/admin/reports` — personel + patron
+- `/admin/services`, `/admin/barbers`, `/admin/availability`, `/admin/settings` — patron
+
+## Yayınlama
+
+`DEPLOY.md` dosyasına bakın (Cloudflare Pages, Netlify, Vercel, GitHub Pages).
