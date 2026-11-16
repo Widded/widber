@@ -1,19 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowRight,
-  CalendarDays,
-  Check,
-  ChevronDown,
-  Clock3,
-  Loader2,
-  Scissors,
-  UserRound,
-  X,
-  Zap,
-  Info,
-} from 'lucide-react';
-import { format, isSameDay, parseISO } from 'date-fns';
+import React, { useMemo, useState } from 'react';
+import { format, isSameDay, isTomorrow, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { Check, Info, Loader2, Zap } from 'lucide-react';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import { useAvailableTimes } from '../hooks/useAvailableTimes';
@@ -23,14 +11,13 @@ import { getBookingDates } from '../lib/bookingDates';
 import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
 import { findEarliestSlotToday } from '../lib/earliestSlot';
-import { Modal } from './ui/modal';
 import { cn } from '../lib/utils';
 
 interface QuickBookingWidgetProps {
   onComplete: () => void;
 }
 
-type FieldKey = 'service' | 'barber' | 'date' | 'time';
+const SUMMARY_PLACEHOLDER = '—';
 
 const getInitials = (name: string) =>
   name
@@ -40,172 +27,21 @@ const getInitials = (name: string) =>
     .map((part) => part.charAt(0).toUpperCase())
     .join('') || 'P';
 
-type PickerFieldProps = {
-  field: FieldKey;
-  label: string;
-  icon: React.ElementType;
-  value: string;
-  placeholder: string;
-  activeField: FieldKey | null;
-  setActiveField: (field: FieldKey | null) => void;
-  disabled?: boolean;
-  panelClassName: string;
-  children: React.ReactNode;
-};
-
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      window.matchMedia('(max-width: 639px)').matches
-  );
-
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 639px)');
-    const handleChange = () => setIsMobile(query.matches);
-
-    handleChange();
-    query.addEventListener('change', handleChange);
-    return () => query.removeEventListener('change', handleChange);
-  }, []);
-
-  return isMobile;
-};
-
-const PickerField = ({
-  field,
-  label,
-  icon: Icon,
-  value,
-  placeholder,
-  activeField,
-  setActiveField,
-  disabled,
-  panelClassName,
-  children,
-}: PickerFieldProps) => {
-  const open = activeField === field;
-  const isMobile = useIsMobile();
-
-  useEffect(() => {
-    if (!open || !isMobile) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open, isMobile]);
-
-  return (
-    <div className="relative">
-      <span className="text-xs font-medium text-slate-500">{label}</span>
-      <button
-        type="button"
-        onClick={() => !disabled && setActiveField(open ? null : field)}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`${label}: ${value || placeholder}`}
-        className={cn(
-          'mt-1.5 flex h-11 w-full items-center gap-2 rounded-lg border bg-white px-3 text-left text-sm transition-all',
-          open
-            ? 'border-blue-500 ring-2 ring-blue-100'
-            : 'border-slate-200 hover:border-slate-300',
-          disabled && 'cursor-not-allowed bg-slate-50 text-slate-400'
-        )}
-      >
-        <Icon
-          className={cn('h-4 w-4 shrink-0', disabled ? 'text-slate-300' : 'text-slate-400')}
-          aria-hidden="true"
-        />
-        <span
-          className={cn(
-            'flex-1 truncate',
-            value ? 'font-medium text-slate-900' : 'text-slate-400'
-          )}
-        >
-          {value || placeholder}
-        </span>
-        <ChevronDown
-          className={cn(
-            'h-4 w-4 shrink-0 text-slate-400 transition-transform',
-            open && 'rotate-180'
-          )}
-          aria-hidden="true"
-        />
-      </button>
-
-      {open && isMobile && (
-        <div
-          className="fixed inset-0 z-[80] flex items-end bg-slate-900/40 backdrop-blur-[2px]"
-          onClick={() => setActiveField(null)}
-          role="presentation"
-        >
-          <div
-            role="listbox"
-            aria-label={label}
-            onClick={(event) => event.stopPropagation()}
-            className="max-h-[82vh] w-full overflow-y-auto rounded-t-2xl border-t border-slate-200 bg-white p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl"
-          >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" aria-hidden="true" />
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-900">{label}</p>
-              <button
-                type="button"
-                onClick={() => setActiveField(null)}
-                aria-label="Paneli kapat"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            {children}
-          </div>
-        </div>
-      )}
-
-      {open && !isMobile && (
-        <div
-          role="listbox"
-          className={cn(
-            'absolute top-full z-50 mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/70',
-            panelClassName
-          )}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-};
-
 export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComplete }) => {
   const { services, barbers, loading } = useSupabaseData();
   const { settings } = useSiteSettings();
   const { setServices, setBarber, setDateTime } = useBooking();
-  const widgetRef = useRef<HTMLFormElement>(null);
 
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [barberId, setBarberId] = useState('');
   const [dateStr, setDateStr] = useState('');
   const [time, setTime] = useState('');
-  const [activeField, setActiveField] = useState<FieldKey | null>(null);
   const [isFindingSlot, setIsFindingSlot] = useState(false);
-  const [serviceModalOpen, setServiceModalOpen] = useState(false);
-  const [foundSlot, setFoundSlot] = useState<{ time: string; barberName: string } | null>(null);
-  const [findError, setFindError] = useState<string | null>(null);
+  const [findMessage, setFindMessage] = useState<string | null>(null);
 
   const selectedServices = services.filter((service) => serviceIds.includes(service.id));
   const selectedBarber = barbers.find((barber) => barber.id === barberId) ?? null;
   const totalPrice = selectedServices.reduce((sum, service) => sum + service.price, 0);
-  const serviceLabel =
-    selectedServices.length === 0
-      ? ''
-      : selectedServices.length === 1
-        ? selectedServices[0].name
-        : `${selectedServices.length} hizmet`;
 
   const availableDates = useMemo(
     () =>
@@ -223,23 +59,9 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     ]
   );
 
-  const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(
-    dateStr,
-    selectedBarber
-  );
+  const { bookedTimes, fetchingTimes } = useAvailableTimes(dateStr, selectedBarber);
 
-  useEffect(() => {
-    const handleBookingConflict = () => {
-      setTime('');
-      refreshTimes();
-    };
-
-    window.addEventListener('widber:booking-conflict', handleBookingConflict);
-    return () =>
-      window.removeEventListener('widber:booking-conflict', handleBookingConflict);
-  }, [refreshTimes]);
-
-  const { available: availableTimes } = splitTimeSlots(
+  const { available: availableTimes, full: fullTimes } = splitTimeSlots(
     selectedBarber?.working_hours ?? [],
     bookedTimes,
     dateStr || null,
@@ -247,87 +69,94 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     getSpecialDate(settings.special_dates, dateStr)
   );
 
-  const canSubmit =
-    selectedServices.length > 0 &&
-    Boolean(selectedBarber && dateStr && time) &&
-    availableTimes.includes(time);
+  const slotGroups = useMemo(() => {
+    const hours = selectedBarber?.working_hours ?? [];
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (widgetRef.current && !widgetRef.current.contains(event.target as Node)) {
-        setActiveField(null);
-      }
+    const groups = {
+      sabah: [] as string[],
+      ogle: [] as string[],
+      aksam: [] as string[],
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    hours.forEach((slot) => {
+      const hour = Number(slot.slice(0, 2));
+      if (hour < 12) groups.sabah.push(slot);
+      else if (hour < 17) groups.ogle.push(slot);
+      else groups.aksam.push(slot);
+    });
 
-  useEffect(() => {
-    if (!activeField) return;
+    return [
+      { key: 'sabah', label: 'Sabah', times: groups.sabah },
+      { key: 'ogle', label: 'Öğle', times: groups.ogle },
+      { key: 'aksam', label: 'Akşam', times: groups.aksam },
+    ].filter((group) => group.times.length > 0);
+  }, [selectedBarber]);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActiveField(null);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeField]);
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
 
   const toggleService = (id: string) => {
-    // Hizmet seçimi müsait saatleri değiştirmez (slot bazlı model), saati koru.
+    setFindMessage(null);
     setServiceIds((prev) =>
       prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]
     );
   };
 
   const selectBarber = (id: string) => {
+    setFindMessage(null);
     setBarberId(id);
     setTime('');
-    setFoundSlot(null);
-    setActiveField('date');
   };
 
   const selectDate = (value: string) => {
+    setFindMessage(null);
     setDateStr(value);
     setTime('');
-    setFoundSlot(null);
-    setActiveField('time');
+  };
+
+  const selectTime = (value: string) => {
+    setFindMessage(null);
+    setTime(value);
   };
 
   const handleFindEarliest = async () => {
     setIsFindingSlot(true);
-    setFindError(null);
-    setFoundSlot(null);
+    setFindMessage(null);
 
     try {
       const slot = await findEarliestSlotToday(barbers, settings);
 
       if (!slot) {
-        setFindError('Bugün müsait saat kalmadı. Başka bir gün seçebilirsin.');
+        setFindMessage('Bugün müsait saat kalmadı. Başka bir gün seçebilirsin.');
         return;
       }
 
-      setDateStr(format(new Date(), 'yyyy-MM-dd'));
       setBarberId(slot.barber.id);
+      setDateStr(todayStr);
       setTime(slot.time);
-      setActiveField(null);
-      setFoundSlot({ time: slot.time, barberName: slot.barber.name });
+      setFindMessage(
+        `Bugün en erken: ${slot.time} · ${slot.barber.name}${
+          selectedServices.length === 0 ? ' — bir hizmet seç' : ''
+        }`
+      );
     } catch (error) {
       console.error('En erken saat bulunamadı:', error);
-      setFindError('Saatler kontrol edilemedi, lütfen tekrar dene.');
+      setFindMessage('Saatler kontrol edilemedi, lütfen tekrar dene.');
     } finally {
       setIsFindingSlot(false);
-      setServiceModalOpen(false);
     }
   };
 
-  const openServiceModal = () => setServiceModalOpen(true);
+  const canSubmit = Boolean(
+    selectedServices.length > 0 &&
+      selectedBarber &&
+      dateStr &&
+      time &&
+      availableTimes.includes(time)
+  );
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (selectedServices.length === 0 || !selectedBarber || !dateStr || !time) return;
+    if (!canSubmit || !selectedBarber) return;
 
     setServices(selectedServices);
     setBarber(selectedBarber);
@@ -337,395 +166,27 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="h-5 w-32 animate-pulse rounded bg-slate-100" />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((item) => (
-            <div key={item} className="h-16 animate-pulse rounded-lg bg-slate-50" />
-          ))}
-        </div>
-        <div className="mt-4 h-11 animate-pulse rounded-lg bg-slate-100" />
+      <div className="grid gap-4 lg:grid-cols-[1fr_316px]">
+        <div className="h-[520px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
+        <div className="h-[320px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
       </div>
     );
   }
 
   return (
-    <>
-      <form
-        ref={widgetRef}
-        onSubmit={handleSubmit}
-        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-      >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">Hızlı randevu</p>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Hizmetini seç, saatini ayır.
-          </p>
-        </div>
-        <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
-          Anında onay
-        </span>
-      </div>
-
-      {settings.min_notice_minutes > 0 && (
-        <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
-          <Info className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-          <span>
-            Randevu saatinden en az {settings.min_notice_minutes} dakika önce
-            randevu almanız gerekir.
-          </span>
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={openServiceModal}
-        disabled={isFindingSlot || barbers.length === 0}
-        className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-3 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isFindingSlot ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-        ) : (
-          <Zap className="h-3.5 w-3.5" aria-hidden="true" />
-        )}
-        Bugünün en erken saatini bul
-      </button>
-
-      {foundSlot && (
-        <p role="status" className="mt-2 text-[11px] font-medium text-slate-500">
-          Bugün en erken: {foundSlot.time} · {foundSlot.barberName}
-          {selectedServices.length === 0 ? ' — bir hizmet seç' : ''}
-        </p>
-      )}
-
-      {findError && (
-        <p role="status" className="mt-2 text-[11px] font-medium text-slate-500">
-          {findError}
-        </p>
-      )}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <PickerField
-          field="service"
-          label="Hizmetler"
-          icon={Scissors}
-          value={serviceLabel}
-          placeholder="Hizmet seçin"
-          activeField={activeField}
-          setActiveField={setActiveField}
-          panelClassName="left-0 w-[320px] max-w-[calc(100vw-48px)]"
-        >
-          <div className="px-2 pb-2 pt-1">
-            <p className="text-xs font-semibold text-slate-500">Hizmet seç</p>
-            <p className="mt-0.5 text-[10px] text-slate-400">
-              Birden fazla hizmet seçebilirsin.
-            </p>
-          </div>
-          <div className="max-h-[260px] space-y-1 overflow-y-auto">
-            {services.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-slate-400">
-                Hizmet bulunamadı.
-              </p>
-            ) : (
-              services.map((service) => {
-                const selected = serviceIds.includes(service.id);
-
-                return (
-                  <button
-                    key={service.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => toggleService(service.id)}
-                    className={cn(
-                      'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-                      selected ? 'bg-blue-50' : 'hover:bg-slate-50'
-                    )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-slate-900">
-                        {service.name}
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-700">
-                        {formatPrice(service.price)}
-                      </span>
-                      <span
-                        className={cn(
-                          'flex h-4 w-4 items-center justify-center rounded border',
-                          selected
-                            ? 'border-blue-600 bg-blue-600 text-white'
-                            : 'border-slate-300 bg-white'
-                        )}
-                      >
-                        {selected && <Check className="h-3 w-3" />}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-1 pt-2">
-            <span className="text-[11px] text-slate-400">
-              {selectedServices.length} seçili
-            </span>
-            <div className="flex items-center gap-2">
-              {selectedServices.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setServiceIds([])}
-                  className="text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-700"
-                >
-                  Temizle
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setActiveField('barber')}
-                disabled={selectedServices.length === 0}
-                className="inline-flex h-8 items-center justify-center rounded-lg bg-blue-600 px-3 text-[11px] font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-              >
-                Devam et
-              </button>
-            </div>
-          </div>
-        </PickerField>
-
-        <PickerField
-          field="barber"
-          label="Personel"
-          icon={UserRound}
-          value={selectedBarber?.name ?? ''}
-          placeholder="Personel seçin"
-          activeField={activeField}
-          setActiveField={setActiveField}
-          panelClassName="right-0 w-[260px] max-w-[calc(100vw-48px)]"
-        >
-          <p className="px-2 pb-2 pt-1 text-xs font-semibold text-slate-500">
-            Personel seç
-          </p>
-          <div className="space-y-1">
-            {barbers.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-slate-400">
-                Personel bulunamadı.
-              </p>
-            ) : (
-              barbers.map((barber) => {
-                const selected = barber.id === barberId;
-
-                return (
-                  <button
-                    key={barber.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => selectBarber(barber.id)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-                      selected ? 'bg-blue-50' : 'hover:bg-slate-50'
-                    )}
-                  >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                      {getInitials(barber.name)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
-                      {barber.name}
-                    </span>
-                    {selected && <Check className="h-4 w-4 text-blue-600" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </PickerField>
-
-        <PickerField
-          field="date"
-          label="Tarih"
-          icon={CalendarDays}
-          value={dateStr ? format(parseISO(dateStr), 'd MMM', { locale: tr }) : ''}
-          placeholder="Tarih seçin"
-          activeField={activeField}
-          setActiveField={setActiveField}
-          panelClassName="left-0 w-[300px] max-w-[calc(100vw-48px)]"
-        >
-          <p className="px-2 pb-2 pt-1 text-xs font-semibold text-slate-500">
-            Tarih seç
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {availableDates.map((date) => {
-              const value = format(date, 'yyyy-MM-dd');
-              const selected = value === dateStr;
-              const today = isSameDay(date, new Date());
-
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => selectDate(value)}
-                  className={cn(
-                    'flex flex-col items-center rounded-lg border px-2 py-2.5 transition-colors',
-                    selected
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : today
-                        ? 'border-blue-200 bg-blue-50 text-slate-900 hover:border-blue-300'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'text-[9px] font-semibold uppercase tracking-[0.08em]',
-                      selected ? 'text-blue-100' : 'text-slate-400'
-                    )}
-                  >
-                    {format(date, 'EEE', { locale: tr })}
-                  </span>
-                  <span className="mt-0.5 text-lg font-bold leading-none">
-                    {format(date, 'd')}
-                  </span>
-                  <span
-                    className={cn(
-                      'mt-0.5 text-[9px] font-medium uppercase',
-                      selected ? 'text-blue-100' : 'text-slate-400'
-                    )}
-                  >
-                    {format(date, 'MMM', { locale: tr })}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </PickerField>
-
-        <PickerField
-          field="time"
-          label="Saat"
-          icon={Clock3}
-          value={time}
-          placeholder={
-            selectedServices.length === 0 || !selectedBarber || !dateStr
-              ? 'Önce diğer alanları seçin'
-              : 'Saat seçin'
-          }
-          activeField={activeField}
-          setActiveField={setActiveField}
-          disabled={selectedServices.length === 0 || !selectedBarber || !dateStr}
-          panelClassName="right-0 w-[280px] max-w-[calc(100vw-48px)]"
-        >
-          <div className="flex items-center justify-between px-2 pb-2 pt-1">
-            <p className="text-xs font-semibold text-slate-500">Saat seç</p>
-            {!fetchingTimes && (
-              <span className="text-[10px] text-slate-400">
-                {availableTimes.length} müsait
-              </span>
-            )}
+    <form onSubmit={handleSubmit} className="grid w-full items-start gap-4 lg:grid-cols-[1fr_316px]">
+      <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        {/* Hizmet */}
+        <section className="border-b border-slate-100 pb-5" aria-labelledby="hizmet-baslik">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="hizmet-baslik" className="text-sm font-semibold text-slate-900">
+              Hizmet
+            </h2>
+            <span className="text-[11px] text-slate-400">Birden fazla seçebilirsin</span>
           </div>
 
-          {fetchingTimes ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-            </div>
-          ) : availableTimes.length === 0 ? (
-            <p className="px-3 py-5 text-center text-xs text-slate-400">
-              Bu tarihte müsait saat yok.
-            </p>
-          ) : (
-            <div className="grid max-h-[240px] grid-cols-3 gap-2 overflow-y-auto">
-              {availableTimes.map((availableTime) => {
-                const selected = availableTime === time;
-
-                return (
-                  <button
-                    key={availableTime}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      setTime(availableTime);
-                      setFoundSlot(null);
-                      setActiveField(null);
-                    }}
-                    className={cn(
-                      'rounded-lg border py-2 text-center text-xs font-semibold transition-colors',
-                      selected
-                        ? 'border-blue-600 bg-blue-600 text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
-                    )}
-                  >
-                    {availableTime}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </PickerField>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-slate-500">
-          {selectedServices.length > 0
-            ? formatPrice(totalPrice)
-            : 'Randevu için seçim yapın'}
-        </p>
-
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 sm:w-auto"
-        >
-          Randevu Al
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-      </form>
-
-      <Modal
-        isOpen={serviceModalOpen}
-        onClose={() => setServiceModalOpen(false)}
-        title="Hizmet seç"
-        icon={<Scissors className="h-5 w-5" aria-hidden="true" />}
-        footer={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setServiceModalOpen(false)}
-              className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-            >
-              Vazgeç
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleFindEarliest()}
-              disabled={selectedServices.length === 0 || isFindingSlot}
-              className="inline-flex h-10 flex-[1.5] items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-            >
-              {isFindingSlot ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Zap className="h-4 w-4" aria-hidden="true" />
-              )}
-              En erken saati bul
-            </button>
-          </div>
-        }
-      >
-        <p className="text-xs leading-relaxed text-slate-500">
-          Bugünün en erken saatini bulmak için hizmetini seç. Birden fazla
-          hizmet seçebilirsin.
-        </p>
-
-        <div className="mt-3 space-y-1">
-          {services.length === 0 ? (
-            <p className="px-3 py-4 text-center text-xs text-slate-400">
-              Hizmet bulunamadı.
-            </p>
-          ) : (
-            services.map((service) => {
+          <div className="grid gap-2 sm:grid-cols-2">
+            {services.map((service) => {
               const selected = serviceIds.includes(service.id);
 
               return (
@@ -735,38 +196,318 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
                   aria-pressed={selected}
                   onClick={() => toggleService(service.id)}
                   className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                    'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
                     selected
-                      ? 'border-blue-300 bg-blue-50'
-                      : 'border-slate-200 hover:bg-slate-50'
+                      ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600'
+                      : 'border-slate-200 hover:border-blue-200 hover:bg-slate-50'
                   )}
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-slate-900">
-                      {service.name}
-                    </span>
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                      selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                    )}
+                    aria-hidden="true"
+                  >
+                    {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
                   </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-700">
-                      {formatPrice(service.price)}
-                    </span>
-                    <span
-                      className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded border',
-                        selected
-                          ? 'border-blue-600 bg-blue-600 text-white'
-                          : 'border-slate-300 bg-white'
-                      )}
-                    >
-                      {selected && <Check className="h-3 w-3" aria-hidden="true" />}
-                    </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-800">
+                    {service.name}
+                  </span>
+                  <span className="shrink-0 text-[13px] font-semibold text-slate-900">
+                    {formatPrice(service.price)}
                   </span>
                 </button>
               );
-            })
+            })}
+          </div>
+        </section>
+
+        {/* Usta */}
+        <section className="border-b border-slate-100 py-5" aria-labelledby="usta-baslik">
+          <h2 id="usta-baslik" className="mb-3 text-sm font-semibold text-slate-900">
+            Usta
+          </h2>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {barbers.map((barber) => {
+              const selected = barber.id === barberId;
+              const hasHours = Boolean(barber.working_hours?.length);
+
+              return (
+                <button
+                  key={barber.id}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={!hasHours}
+                  onClick={() => selectBarber(barber.id)}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors',
+                    selected
+                      ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600'
+                      : 'border-slate-200 hover:border-blue-200 hover:bg-slate-50',
+                    !hasHours && 'cursor-not-allowed opacity-60'
+                  )}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[11px] font-bold text-blue-700">
+                    {getInitials(barber.name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-slate-800">
+                      {barber.name}
+                    </span>
+                    <span className="block text-[11px] text-slate-400">
+                      {hasHours ? 'Randevu alabilir' : 'Mesai tanımlı değil'}
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                      selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white'
+                    )}
+                    aria-hidden="true"
+                  >
+                    {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Tarih */}
+        <section className="border-b border-slate-100 py-5" aria-labelledby="tarih-baslik">
+          <h2 id="tarih-baslik" className="mb-3 text-sm font-semibold text-slate-900">
+            Tarih
+          </h2>
+
+          {availableDates.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              Şu anda randevu takvimi kapalı. Lütfen bizimle iletişime geç.
+            </p>
+          ) : (
+            <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1">
+              {availableDates.map((date) => {
+                const value = format(date, 'yyyy-MM-dd');
+                const selected = value === dateStr;
+                const label = isSameDay(date, new Date())
+                  ? 'Bugün'
+                  : isTomorrow(date)
+                    ? 'Yarın'
+                    : format(date, 'EEE', { locale: tr });
+
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => selectDate(value)}
+                    className={cn(
+                      'flex min-w-[70px] flex-col items-center gap-0.5 rounded-xl border px-3 py-2 transition-colors',
+                      selected
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-slate-50'
+                    )}
+                  >
+                    <span className={cn('text-[10px] font-semibold uppercase tracking-wide', selected ? 'text-blue-100' : 'text-slate-400')}>
+                      {label}
+                    </span>
+                    <span className="text-base font-bold leading-none">{format(date, 'd')}</span>
+                    <span className={cn('text-[9px] font-medium uppercase', selected ? 'text-blue-100' : 'text-slate-400')}>
+                      {format(date, 'MMM', { locale: tr })}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
+        </section>
+
+        {/* Saat */}
+        <section className="pt-5" aria-labelledby="saat-baslik">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="saat-baslik" className="text-sm font-semibold text-slate-900">
+              Saat
+            </h2>
+            {selectedBarber && !fetchingTimes && (
+              <span className="text-[11px] text-slate-400">
+                {availableTimes.length} müsait
+              </span>
+            )}
+          </div>
+
+          {!selectedBarber ? (
+            <p className="rounded-xl bg-slate-50 px-3 py-4 text-xs text-slate-500">
+              Saatleri görmek için önce usta seç.
+            </p>
+          ) : !selectedBarber.working_hours?.length ? (
+            <p className="rounded-xl bg-slate-50 px-3 py-4 text-xs text-slate-500">
+              Bu usta için çalışma saati tanımlı değil.
+            </p>
+          ) : !dateStr ? (
+            <p className="rounded-xl bg-slate-50 px-3 py-4 text-xs text-slate-500">
+              Saatleri görmek için tarih seç.
+            </p>
+          ) : fetchingTimes ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 px-3 py-6 text-xs text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Müsait saatler yükleniyor
+            </div>
+          ) : availableTimes.length === 0 ? (
+            <p className="rounded-xl bg-slate-50 px-3 py-4 text-xs text-slate-500">
+              Bu gün için müsait saat kalmadı. Başka bir gün seçebilirsin.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {slotGroups.map((group) => (
+                <div key={group.key}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      {group.label}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-100" aria-hidden="true" />
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                    {group.times.map((slot) => {
+                      const isAvailable = availableTimes.includes(slot);
+                      const selected = slot === time;
+
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          disabled={!isAvailable}
+                          aria-pressed={selected}
+                          onClick={() => selectTime(slot)}
+                          className={cn(
+                            'h-9 rounded-lg border text-xs font-semibold tabular-nums transition-colors',
+                            selected
+                              ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                              : isAvailable
+                                ? 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-slate-50'
+                                : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300 line-through'
+                          )}
+                        >
+                          {slot}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {fullTimes.length > 0 && (
+                <p className="text-[11px] text-slate-400">
+                  {fullTimes.length} saat dolu veya geçmiş.
+                </p>
+              )}
+            </div>
+          )}
+
+          {settings.min_notice_minutes > 0 && (
+            <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-slate-50 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
+              <Info className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+              Randevu saatinden en az {settings.min_notice_minutes} dakika önce randevu
+              almanız gerekir.
+            </p>
+          )}
+        </section>
+      </div>
+
+      {/* Özet */}
+      <aside className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 lg:sticky lg:top-24">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+          Randevu özeti
+        </h2>
+
+        <dl className="mt-3 space-y-2.5 text-xs">
+          {[
+            {
+              label: 'Hizmet',
+              value:
+                selectedServices.length === 0
+                  ? SUMMARY_PLACEHOLDER
+                  : selectedServices.map((service) => service.name).join(', '),
+            },
+            { label: 'Usta', value: selectedBarber?.name ?? SUMMARY_PLACEHOLDER },
+            {
+              label: 'Tarih',
+              value: dateStr
+                ? format(parseISO(dateStr), 'd MMMM', { locale: tr })
+                : SUMMARY_PLACEHOLDER,
+              hint: dateStr && dateStr === todayStr ? 'Bugün' : undefined,
+            },
+            { label: 'Saat', value: time || SUMMARY_PLACEHOLDER },
+          ].map((row) => (
+            <div
+              key={row.label}
+              className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-200 pb-2.5"
+            >
+              <dt className="shrink-0 text-slate-500">{row.label}</dt>
+              <dd className="text-right font-semibold text-slate-900">
+                {row.value}
+                {row.hint && (
+                  <span className="mt-0.5 block text-[10px] font-normal text-slate-400">
+                    {row.hint}
+                  </span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-4 flex items-baseline justify-between">
+          <span className="text-xs text-slate-500">Toplam</span>
+          <b className="text-2xl tracking-tight text-slate-900">{formatPrice(totalPrice)}</b>
         </div>
-      </Modal>
-    </>
+
+        <div className="mt-4 space-y-2">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="hidden h-12 w-full items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 lg:inline-flex"
+          >
+            Randevuyu onayla
+          </button>
+          <button
+            type="button"
+            onClick={handleFindEarliest}
+            disabled={isFindingSlot}
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isFindingSlot ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Bugünün en erken saatini bul
+          </button>
+        </div>
+
+        {findMessage && (
+          <p role="status" className="mt-2 text-[11px] font-medium text-slate-500">
+            {findMessage}
+          </p>
+        )}
+
+        <p className="mt-3 text-center text-[10px] text-slate-400">
+          Anında onay · Ödeme dükkânda
+        </p>
+      </aside>
+
+      {/* Mobil alt bar */}
+      <div className="sticky bottom-0 z-30 mt-1 flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="shrink-0">
+          <span className="block text-[10px] text-slate-400">Toplam</span>
+          <b className="text-lg tracking-tight text-slate-900">{formatPrice(totalPrice)}</b>
+        </div>
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="h-11 flex-1 rounded-xl bg-blue-600 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+        >
+          Randevuyu onayla
+        </button>
+      </div>
+    </form>
   );
 };
