@@ -67,6 +67,7 @@ const AvailabilityManagement = () => {
       booking_window_days: settings.booking_window_days,
       closed_weekdays: settings.closed_weekdays,
       same_day_booking: settings.same_day_booking,
+      special_dates: settings.special_dates,
     })
   );
   const [permanentHours, setPermanentHours] = useState<string[]>([]);
@@ -112,8 +113,14 @@ const AvailabilityManagement = () => {
         booking_window_days: settings.booking_window_days,
         closed_weekdays: settings.closed_weekdays,
         same_day_booking: settings.same_day_booking,
+        special_dates: settings.special_dates,
       }),
-    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+    [
+      settings.booking_window_days,
+      settings.closed_weekdays,
+      settings.same_day_booking,
+      settings.special_dates,
+    ]
   );
 
   useEffect(() => {

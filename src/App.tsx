@@ -49,6 +49,7 @@ const AppointmentsIndexRedirect = () => {
     booking_window_days: settings.booking_window_days,
     closed_weekdays: settings.closed_weekdays,
     same_day_booking: settings.same_day_booking,
+    special_dates: settings.special_dates,
   });
 
   return (

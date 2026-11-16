@@ -1,4 +1,8 @@
 import { addDays, isToday, parse, parseISO } from 'date-fns';
+import {
+  isTimeWithinSpecialHours,
+  type SpecialDate,
+} from './specialDates';
 
 /**
  * Bugün için geçmiş saatleri dolu kabul eder.
@@ -29,7 +33,8 @@ export const splitTimeSlots = (
   workingHours: string[] = [],
   blockedTimes: string[] = [],
   date: string | null = null,
-  minNoticeMinutes = 0
+  minNoticeMinutes = 0,
+  specialDate: SpecialDate | null = null
 ) => {
   const available: string[] = [];
   const full: string[] = [];
@@ -37,7 +42,8 @@ export const splitTimeSlots = (
   workingHours.forEach((time) => {
     if (
       blockedTimes.includes(time) ||
-      isTimeInPast(time, date, minNoticeMinutes)
+      isTimeInPast(time, date, minNoticeMinutes) ||
+      !isTimeWithinSpecialHours(time, specialDate)
     ) {
       full.push(time);
     } else {

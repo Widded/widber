@@ -26,6 +26,11 @@ create table if not exists public.site_settings (
   same_day_booking boolean not null default true,
   min_notice_minutes integer not null default 0 check (min_notice_minutes between 0 and 1440),
   cancellation_policy text not null default '',
+  special_dates jsonb not null default '[]'::jsonb,
+  announcement_enabled boolean not null default false,
+  announcement_text text not null default '',
+  announcement_link_label text not null default '',
+  announcement_link_url text not null default '',
   maintenance_mode boolean not null default false,
   booking_paused boolean not null default false,
   updated_at timestamptz not null default now(),
@@ -35,6 +40,13 @@ create table if not exists public.site_settings (
 insert into public.site_settings (id)
 values (1)
 on conflict (id) do nothing;
+
+alter table public.site_settings
+  add column if not exists special_dates jsonb not null default '[]'::jsonb,
+  add column if not exists announcement_enabled boolean not null default false,
+  add column if not exists announcement_text text not null default '',
+  add column if not exists announcement_link_label text not null default '',
+  add column if not exists announcement_link_url text not null default '';
 
 alter table public.site_settings enable row level security;
 

@@ -129,8 +129,14 @@ const AppointmentsDayView = () => {
         booking_window_days: settings.booking_window_days,
         closed_weekdays: settings.closed_weekdays,
         same_day_booking: settings.same_day_booking,
+        special_dates: settings.special_dates,
       }),
-    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+    [
+      settings.booking_window_days,
+      settings.closed_weekdays,
+      settings.same_day_booking,
+      settings.special_dates,
+    ]
   );
   const firstBookingDate = bookingDates[0] ?? new Date();
   const lastBookingDate = bookingDates[bookingDates.length - 1] ?? new Date();

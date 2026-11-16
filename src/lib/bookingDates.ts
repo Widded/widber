@@ -1,9 +1,11 @@
 import { addDays, getDay, startOfDay } from 'date-fns';
+import { isDateFullyClosed, type SpecialDate } from './specialDates';
 
 export type BookingDateOptions = {
   booking_window_days?: number;
   closed_weekdays?: number[];
   same_day_booking?: boolean;
+  special_dates?: SpecialDate[];
 };
 
 /**
@@ -21,7 +23,11 @@ export const getBookingDates = (options?: BookingDateOptions) => {
 
   return Array.from({ length: dayCount }, (_, index) =>
     addDays(startOfDay(new Date()), index + startOffset)
-  ).filter((date) => !closedWeekdays.includes(getDay(date)));
+  ).filter(
+    (date) =>
+      !closedWeekdays.includes(getDay(date)) &&
+      !isDateFullyClosed(options?.special_dates, date)
+  );
 };
 
 export const getFirstBookingDate = (options?: BookingDateOptions) =>

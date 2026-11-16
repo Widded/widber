@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { ArrowRight, Check, Megaphone } from 'lucide-react';
 import { QuickBookingWidget } from '../../components/QuickBookingWidget';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 
@@ -35,6 +35,26 @@ const Home = () => {
 
   return (
     <div className="bg-white">
+      {settings.announcement_enabled && settings.announcement_text && (
+        <div className="border-b border-blue-100 bg-blue-50">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-center gap-1 px-4 py-2.5 text-center text-xs font-medium text-blue-800 sm:flex-row sm:gap-2">
+            <Megaphone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{settings.announcement_text}</span>
+            {settings.announcement_link_url && (
+              <a
+                href={settings.announcement_link_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-blue-700 underline-offset-2 hover:underline"
+              >
+                {settings.announcement_link_label || 'Detay'}
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       <section className="relative bg-[linear-gradient(180deg,#EFF6FF_0%,#FFFFFF_45%,#FFFFFF_100%)]">
         <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 lg:min-h-[calc(100svh-80px)] lg:grid-cols-[1fr_0.9fr] lg:items-center lg:py-24">
           <div>

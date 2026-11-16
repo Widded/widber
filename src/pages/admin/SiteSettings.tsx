@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { format, parseISO } from 'date-fns';
+import { tr } from 'date-fns/locale';
 import {
   Building2,
   CalendarClock,
   ImagePlus,
   Loader2,
+  Megaphone,
   Palette,
+  Plus,
   Save,
   ShieldAlert,
   Trash2,
@@ -19,6 +23,7 @@ import {
   type SiteSettings,
 } from '../../hooks/useSiteSettings';
 import { supabase } from '../../lib/supabase';
+import type { SpecialDate } from '../../lib/specialDates';
 import { cn } from '../../lib/utils';
 
 type Tab = 'business' | 'appearance' | 'booking' | 'system';
@@ -60,6 +65,11 @@ const editableKeys: (keyof SiteSettings)[] = [
   'same_day_booking',
   'min_notice_minutes',
   'cancellation_policy',
+  'special_dates',
+  'announcement_enabled',
+  'announcement_text',
+  'announcement_link_label',
+  'announcement_link_url',
   'maintenance_mode',
   'booking_paused',
 ];
@@ -85,6 +95,11 @@ const toDbPayload = (settings: SiteSettings) => ({
   same_day_booking: settings.same_day_booking,
   min_notice_minutes: settings.min_notice_minutes,
   cancellation_policy: settings.cancellation_policy,
+  special_dates: settings.special_dates,
+  announcement_enabled: settings.announcement_enabled,
+  announcement_text: settings.announcement_text,
+  announcement_link_label: settings.announcement_link_label,
+  announcement_link_url: settings.announcement_link_url,
   maintenance_mode: settings.maintenance_mode,
   booking_paused: settings.booking_paused,
 });
@@ -153,6 +168,19 @@ const SiteSettingsPage = () => {
   const [initialized, setInitialized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo_url' | 'hero_image_url' | null>(null);
+  const [newSpecial, setNewSpecial] = useState<{
+    date: string;
+    mode: 'closed' | 'custom';
+    open_time: string;
+    close_time: string;
+    note: string;
+  }>({
+    date: '',
+    mode: 'closed',
+    open_time: '10:00',
+    close_time: '18:00',
+    note: '',
+  });
 
   useEffect(() => {
     if (loading || initialized) return;
@@ -183,6 +211,56 @@ const SiteSettingsPage = () => {
           : [...previous.closed_weekdays, day],
       };
     });
+  };
+
+  const addSpecialDate = () => {
+    if (!newSpecial.date) {
+      showToast({ message: 'Özel gün için tarih seçin.', variant: 'error' });
+      return;
+    }
+
+    if (form.special_dates.some((entry) => entry.date === newSpecial.date)) {
+      showToast({ message: 'Bu tarih zaten listede.', variant: 'error' });
+      return;
+    }
+
+    if (
+      newSpecial.mode === 'custom' &&
+      (!newSpecial.open_time ||
+        !newSpecial.close_time ||
+        newSpecial.close_time <= newSpecial.open_time)
+    ) {
+      showToast({ message: 'Kapanış saati açılıştan sonra olmalı.', variant: 'error' });
+      return;
+    }
+
+    const entry: SpecialDate = {
+      date: newSpecial.date,
+      closed: newSpecial.mode === 'closed',
+      open_time: newSpecial.mode === 'custom' ? newSpecial.open_time : undefined,
+      close_time: newSpecial.mode === 'custom' ? newSpecial.close_time : undefined,
+      note: newSpecial.note.trim() || undefined,
+    };
+
+    setForm((previous) => ({
+      ...previous,
+      special_dates: [...previous.special_dates, entry].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      ),
+    }));
+
+    setNewSpecial((previous) => ({
+      ...previous,
+      date: '',
+      note: '',
+    }));
+  };
+
+  const removeSpecialDate = (date: string) => {
+    setForm((previous) => ({
+      ...previous,
+      special_dates: previous.special_dates.filter((entry) => entry.date !== date),
+    }));
   };
 
   const uploadImage = async (
@@ -511,6 +589,58 @@ const SiteSettingsPage = () => {
             </Field>
           </div>
 
+          <div className="rounded-xl border border-slate-200 p-3.5">
+            <Toggle
+              checked={form.announcement_enabled}
+              onChange={(checked) => setField('announcement_enabled', checked)}
+              title="Anasayfa duyuru bandı"
+              description="Anasayfanın en üstünde ince bir duyuru şeridi gösterir."
+            />
+
+            {form.announcement_enabled && (
+              <div className="mt-4 space-y-3">
+                <Field label="Duyuru metni">
+                  <textarea
+                    value={form.announcement_text}
+                    onChange={(event) => setField('announcement_text', event.target.value)}
+                    className={textareaClass}
+                    placeholder="Bu hafta Salı günü kapalıyız."
+                  />
+                </Field>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Bağlantı metni (opsiyonel)">
+                    <input
+                      value={form.announcement_link_label}
+                      onChange={(event) =>
+                        setField('announcement_link_label', event.target.value)
+                      }
+                      className={inputClass}
+                      placeholder="Detay"
+                    />
+                  </Field>
+                  <Field label="Bağlantı adresi (opsiyonel)">
+                    <input
+                      value={form.announcement_link_url}
+                      onChange={(event) =>
+                        setField('announcement_link_url', event.target.value)
+                      }
+                      className={inputClass}
+                      placeholder="https://..."
+                    />
+                  </Field>
+                </div>
+
+                {form.announcement_text && (
+                  <div className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+                    <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>{form.announcement_text}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-5 sm:grid-cols-2">
             {imageUploader('logo_url', 'Logo', 'h-12 w-20')}
             {imageUploader('hero_image_url', 'Kapak görseli', 'h-20 w-32')}
@@ -584,6 +714,132 @@ const SiteSettingsPage = () => {
             title="Aynı gün randevu"
             description="Kapalıysa bugün için randevu alınamaz; ilk gün yarın olur."
           />
+
+          <div className="rounded-xl border border-slate-200 p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-800">
+                  Özel kapanış / tatil günleri
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+                  Belirli bir tarihte tüm günü kapat veya özel çalışma saati tanımla.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
+                {form.special_dates.length}
+              </span>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <Field label="Tarih">
+                <input
+                  type="date"
+                  value={newSpecial.date}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  onChange={(event) =>
+                    setNewSpecial((previous) => ({ ...previous, date: event.target.value }))
+                  }
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Uygulama">
+                <select
+                  value={newSpecial.mode}
+                  onChange={(event) =>
+                    setNewSpecial((previous) => ({
+                      ...previous,
+                      mode: event.target.value as 'closed' | 'custom',
+                    }))
+                  }
+                  className={cn(inputClass, 'appearance-none')}
+                >
+                  <option value="closed">Tüm gün kapalı</option>
+                  <option value="custom">Özel saatler</option>
+                </select>
+              </Field>
+            </div>
+
+            {newSpecial.mode === 'custom' && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Field label="Açılış">
+                  <input
+                    type="time"
+                    value={newSpecial.open_time}
+                    onChange={(event) =>
+                      setNewSpecial((previous) => ({
+                        ...previous,
+                        open_time: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Kapanış">
+                  <input
+                    type="time"
+                    value={newSpecial.close_time}
+                    onChange={(event) =>
+                      setNewSpecial((previous) => ({
+                        ...previous,
+                        close_time: event.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input
+                value={newSpecial.note}
+                onChange={(event) =>
+                  setNewSpecial((previous) => ({ ...previous, note: event.target.value }))
+                }
+                className={cn(inputClass, 'flex-1')}
+                placeholder="Not (opsiyonel): Resmi tatil, bayram..."
+              />
+              <button
+                type="button"
+                onClick={addSpecialDate}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Ekle
+              </button>
+            </div>
+
+            {form.special_dates.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {form.special_dates.map((entry) => (
+                  <div
+                    key={entry.date}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-slate-800">
+                        {format(parseISO(entry.date), 'd MMM yyyy, EEEE', { locale: tr })}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">
+                        {entry.closed
+                          ? 'Tüm gün kapalı'
+                          : `Özel saat: ${entry.open_time}–${entry.close_time}`}
+                        {entry.note ? ` · ${entry.note}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeSpecialDate(entry.date)}
+                      aria-label={`${entry.date} özel gününü kaldır`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Field label="İptal politikası" hint="Randevu özetinde ve bilgilendirmede gösterilir">
             <textarea

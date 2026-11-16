@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import {
+  parseSpecialDates,
+  type SpecialDate,
+} from '../lib/specialDates';
 
 export type SiteSettings = {
   id: number;
@@ -23,6 +27,11 @@ export type SiteSettings = {
   same_day_booking: boolean;
   min_notice_minutes: number;
   cancellation_policy: string;
+  special_dates: SpecialDate[];
+  announcement_enabled: boolean;
+  announcement_text: string;
+  announcement_link_label: string;
+  announcement_link_url: string;
   maintenance_mode: boolean;
   booking_paused: boolean;
   updated_at?: string;
@@ -52,6 +61,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   same_day_booking: true,
   min_notice_minutes: 0,
   cancellation_policy: '',
+  special_dates: [],
+  announcement_enabled: false,
+  announcement_text: '',
+  announcement_link_label: '',
+  announcement_link_url: '',
   maintenance_mode: false,
   booking_paused: false,
 };
@@ -91,6 +105,7 @@ const loadSiteSettings = (): Promise<SiteSettings> => {
       closed_weekdays: Array.isArray(data?.closed_weekdays)
         ? data.closed_weekdays.map(Number)
         : DEFAULT_SITE_SETTINGS.closed_weekdays,
+      special_dates: parseSpecialDates(data?.special_dates),
     };
 
     cachedSettings = { data: settings, fetchedAt: Date.now() };

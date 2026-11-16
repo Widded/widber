@@ -18,6 +18,7 @@ import { useAvailableTimes } from '../hooks/useAvailableTimes';
 import { useBooking } from '../context/BookingContext';
 import { splitTimeSlots } from '../lib/availability';
 import { getBookingDates } from '../lib/bookingDates';
+import { getSpecialDate } from '../lib/specialDates';
 import { formatPrice } from '../lib/appointmentUtils';
 import { cn } from '../lib/utils';
 
@@ -204,8 +205,14 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
         booking_window_days: settings.booking_window_days,
         closed_weekdays: settings.closed_weekdays,
         same_day_booking: settings.same_day_booking,
+        special_dates: settings.special_dates,
       }),
-    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+    [
+      settings.booking_window_days,
+      settings.closed_weekdays,
+      settings.same_day_booking,
+      settings.special_dates,
+    ]
   );
 
   const { bookedTimes, fetchingTimes, refresh: refreshTimes } = useAvailableTimes(
@@ -228,7 +235,8 @@ export const QuickBookingWidget: React.FC<QuickBookingWidgetProps> = ({ onComple
     selectedBarber?.working_hours ?? [],
     bookedTimes,
     dateStr || null,
-    settings.min_notice_minutes
+    settings.min_notice_minutes,
+    getSpecialDate(settings.special_dates, dateStr)
   );
 
   const canSubmit =

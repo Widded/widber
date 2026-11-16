@@ -10,6 +10,7 @@ import { Check, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, User
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { cn } from '../../lib/utils';
 import { getBookingDates } from '../../lib/bookingDates';
+import { getSpecialDate } from '../../lib/specialDates';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useSupabaseData } from '../../hooks/useSupabaseData';
@@ -86,7 +87,8 @@ const BookingWizard = () => {
     workingHours,
     bookedTimes,
     selectedDate,
-    settings.min_notice_minutes
+    settings.min_notice_minutes,
+    getSpecialDate(settings.special_dates, selectedDate)
   );
 
   React.useEffect(() => {
@@ -113,8 +115,14 @@ const BookingWizard = () => {
         booking_window_days: settings.booking_window_days,
         closed_weekdays: settings.closed_weekdays,
         same_day_booking: settings.same_day_booking,
+        special_dates: settings.special_dates,
       }),
-    [settings.booking_window_days, settings.closed_weekdays, settings.same_day_booking]
+    [
+      settings.booking_window_days,
+      settings.closed_weekdays,
+      settings.same_day_booking,
+      settings.special_dates,
+    ]
   );
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
