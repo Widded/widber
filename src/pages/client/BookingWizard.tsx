@@ -19,6 +19,8 @@ import { useAvailableTimes } from '../../hooks/useAvailableTimes';
 import { splitTimeSlots } from '../../lib/availability';
 import { supabase } from '../../lib/supabase';
 import { isSlotConflictError, SLOT_CONFLICT_MESSAGE } from '../../lib/bookingErrors';
+import { getAppointmentLink } from '../../lib/bookingLink';
+import { BookingSuccess } from '../../components/BookingSuccess';
 
 const STEPS = [
   { id: 1, title: 'Hizmet Seçimi' },
@@ -50,6 +52,7 @@ const BookingWizard = () => {
   const [phone, setPhone] = useState(appointment.customerInfo?.phone || '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cancelLink, setCancelLink] = useState<string | null>(null);
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     type: 'danger' | 'warning' | 'success';
@@ -164,6 +167,7 @@ const BookingWizard = () => {
     try {
       // 1. Randevu ID'sini istemcide üret: insert sonrası anon SELECT izni gerekmiyor.
       const appointmentId = crypto.randomUUID();
+      const cancelToken = crypto.randomUUID();
 
       const { error: appError } = await supabase
         .from('appointments')
@@ -177,7 +181,8 @@ const BookingWizard = () => {
           barber_id: selectedBarber?.id,
           total_price: totalPrice,
           total_duration: totalDuration,
-          status: 'approved'
+          status: 'approved',
+          cancel_token: cancelToken,
         }]);
 
       if (appError) throw appError;
@@ -195,12 +200,7 @@ const BookingWizard = () => {
       if (mappingError) throw mappingError;
 
       setIsSubmitting(false);
-      setModalState({
-        isOpen: true,
-        type: 'success',
-        title: 'Randevu Onaylandı',
-        description: 'Randevunuz başarıyla oluşturuldu! Sizi bekliyoruz.'
-      });
+      setCancelLink(getAppointmentLink(cancelToken));
       // Context'i temizle
       setSelectedServices([]);
       setSelectedBarber(null);
@@ -703,7 +703,7 @@ const BookingWizard = () => {
       </div>
       
       <ConfirmModal 
-        isOpen={modalState.isOpen}
+        isOpen={modalState.isOpen && modalState.type !== 'success'}
         onClose={closeModal}
         onConfirm={closeModal}
         title={modalState.title}
@@ -712,6 +712,21 @@ const BookingWizard = () => {
         confirmText="Tamam"
         cancelText=""
       />
+
+      {cancelLink && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden="true" />
+          <div className="relative z-10 w-full max-w-md">
+            <BookingSuccess
+              link={cancelLink}
+              onClose={() => {
+                setCancelLink(null);
+                navigate('/');
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 const routerBase = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
 const BookingWizard = lazy(() => import('./pages/client/BookingWizard'));
+const AppointmentStatus = lazy(() => import('./pages/client/AppointmentStatus'));
 const AppointmentsDayView = lazy(() => import('./pages/admin/AppointmentsDayView'));
 const CalendarView = lazy(() => import('./pages/admin/CalendarView'));
 const ServicesManagement = lazy(() => import('./pages/admin/ServicesManagement'));
@@ -70,6 +71,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="booking" element={<BookingWizard />} />
+              <Route path="randevu/:token" element={<AppointmentStatus />} />
             </Route>
 
             {/* Admin / Staff Login */}

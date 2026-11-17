@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { ArrowRight, Check, Loader2, X } from 'lucide-react';
+import { ArrowRight, Loader2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { supabase } from '../lib/supabase';
 import { isSlotConflictError, SLOT_CONFLICT_MESSAGE } from '../lib/bookingErrors';
 import { useBooking } from '../context/BookingContext';
+import { getAppointmentLink } from '../lib/bookingLink';
+import { BookingSuccess } from './BookingSuccess';
 
 interface FastBookingModalProps {
   onClose: () => void;
@@ -17,6 +19,7 @@ export const FastBookingModal: React.FC<FastBookingModalProps> = ({ onClose }) =
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [cancelToken, setCancelToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slotConflict, setSlotConflict] = useState(false);
 
@@ -42,6 +45,7 @@ export const FastBookingModal: React.FC<FastBookingModalProps> = ({ onClose }) =
         (sum, service) => sum + service.duration,
         0
       );
+      const token = crypto.randomUUID();
 
       const { data: appointmentData, error: appointmentError } = await supabase
         .from('appointments')
@@ -56,6 +60,7 @@ export const FastBookingModal: React.FC<FastBookingModalProps> = ({ onClose }) =
             total_price: totalPrice,
             total_duration: totalDuration,
             status: 'approved',
+            cancel_token: token,
           },
         ])
         .select('id')
@@ -76,9 +81,9 @@ export const FastBookingModal: React.FC<FastBookingModalProps> = ({ onClose }) =
         if (mappingError) throw mappingError;
       }
 
+      setCancelToken(token);
       setSuccess(true);
       resetAppointment();
-      window.setTimeout(onClose, 3000);
     } catch (err) {
       console.error(err);
 
@@ -94,44 +99,8 @@ export const FastBookingModal: React.FC<FastBookingModalProps> = ({ onClose }) =
     }
   };
 
-  if (success) {
-    return (
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="fast-booking-success-title"
-        className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-2xl"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Kapat"
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
-
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
-          <Check className="h-8 w-8 text-emerald-600" aria-hidden="true" />
-        </div>
-        <h2
-          id="fast-booking-success-title"
-          className="mt-5 text-xl font-bold tracking-tight text-slate-900"
-        >
-          Randevunuz onaylandı
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          Sizi bekliyor olacağız. Randevu detaylarınız personel panelinde görünecek.
-        </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-        >
-          Kapat
-        </button>
-      </div>
-    );
+  if (success && cancelToken) {
+    return <BookingSuccess link={getAppointmentLink(cancelToken)} onClose={onClose} />;
   }
 
   return (

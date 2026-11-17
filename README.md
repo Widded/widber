@@ -32,6 +32,7 @@ Yeni bir Supabase projesi için `supabase-setup.sql` dosyasını SQL Editor'de
 4. `supabase-slot-only-booking.sql`
 5. `supabase-security-performance-fixes.sql`
 6. `supabase-slot-visibility-fix.sql`
+7. `supabase-cancel-link.sql`
 
 Patron e-postası `supabase-setup.sql` içindeki `is_owner()` fonksiyonunda ve
 `.env` içindeki `VITE_ADMIN_EMAIL` değerinde **aynı** olmalıdır.
